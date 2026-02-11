@@ -143,7 +143,8 @@ int VideoEncoder::packets_per_frame() {
 }
 
 void VideoEncoder::embed_data_in_frame(const std::vector<std::byte> &data) {
-    const auto &[patterns] = get_precomputed_blocks();
+    const auto &blocks = get_precomputed_blocks();
+    const auto &patterns = blocks.patterns;
 
     const std::size_t total_bits = data.size() * 8;
     const int total_blocks = layout_.blocks_per_row * layout_.blocks_per_col;
