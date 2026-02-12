@@ -302,7 +302,10 @@ void DriveManagerUI::setupUI() {
     passwordEdit = new QLineEdit();
     passwordEdit->setPlaceholderText("For encrypt or decrypt");
     passwordEdit->setEchoMode(QLineEdit::Password);
-    fileOpsLayout->addWidget(passwordEdit, 3, 1, 1, 2);
+    fileOpsLayout->addWidget(passwordEdit, 3, 1);
+    passwordVisibilityButton = new QPushButton("Show");
+    passwordVisibilityButton->setFixedWidth(selectInputButton->sizeHint().width());
+    fileOpsLayout->addWidget(passwordVisibilityButton, 3, 2);
     
     encodeButton = new QPushButton("Encode to Video");
     encodeButton->setIcon(QIcon::fromTheme("media-record"));
@@ -426,6 +429,17 @@ void DriveManagerUI::connectSignals() {
     connect(batchEncodeButton, &QPushButton::clicked, this, &DriveManagerUI::startBatchEncode);
     
     connect(clearLogsButton, &QPushButton::clicked, this, &DriveManagerUI::clearLogs);
+    connect(passwordVisibilityButton, &QPushButton::clicked, this, &DriveManagerUI::togglePasswordVisibility);
+}
+
+void DriveManagerUI::togglePasswordVisibility() {
+    if (passwordEdit->echoMode() == QLineEdit::Password) {
+        passwordEdit->setEchoMode(QLineEdit::Normal);
+        passwordVisibilityButton->setText("Hide");
+    } else {
+        passwordEdit->setEchoMode(QLineEdit::Password);
+        passwordVisibilityButton->setText("Show");
+    }
 }
 
 void DriveManagerUI::selectInputFile() {

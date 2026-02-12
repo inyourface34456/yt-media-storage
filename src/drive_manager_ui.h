@@ -76,6 +76,7 @@ private slots:
     void updateFileList();
     void removeSelectedFiles();
     void clearFileList();
+    void togglePasswordVisibility();
 
 private:
     void setupUI();
@@ -100,6 +101,7 @@ private:
     QPushButton* selectOutputButton;
     QCheckBox* encryptCheckBox;
     QLineEdit* passwordEdit;
+    QPushButton* passwordVisibilityButton;
     QPushButton* encodeButton;
     QPushButton* decodeButton;
     
