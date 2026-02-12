@@ -20,11 +20,14 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <span>
 #include <vector>
 
 constexpr std::size_t CRYPTO_KEY_BYTES = 32u;
 constexpr std::size_t CRYPTO_PLAIN_SIZE_HEADER = 4u;
+
+uint32_t read_plain_size_from_header(std::span<const std::byte> chunk);
 
 std::array<std::byte, CRYPTO_KEY_BYTES> derive_key(
     std::span<const std::byte> password,

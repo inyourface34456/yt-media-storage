@@ -87,6 +87,7 @@ void WorkerThread::run() {
             std::vector<std::vector<Packet>> all_chunk_packets(num_chunks);
             
             emit statusUpdated("Encoding chunks...");
+#pragma omp parallel for schedule(dynamic)
             for (int i = 0; i < static_cast<int>(num_chunks); ++i) {
                 auto chunk_data = chunkSpan(chunked, static_cast<std::size_t>(i));
                 std::span<const std::byte> data_to_encode = chunk_data;
@@ -98,9 +99,11 @@ void WorkerThread::run() {
                 const bool is_last = (i == static_cast<int>(num_chunks) - 1);
                 auto [chunk_packets, manifest] = encoder.encode_chunk(static_cast<uint32_t>(i), data_to_encode, is_last, encrypt);
                 all_chunk_packets[i] = std::move(chunk_packets);
-                
-                int progress = 30 + (60 * (i + 1) / static_cast<int>(num_chunks));
-                emit progressUpdated(progress);
+#pragma omp critical
+                {
+                    int progress = 30 + (60 * (i + 1) / static_cast<int>(num_chunks));
+                    emit progressUpdated(progress);
+                }
             }
             
             std::size_t total_packets = 0;
@@ -315,7 +318,10 @@ void DriveManagerUI::setupUI() {
     passwordEdit = new QLineEdit();
     passwordEdit->setPlaceholderText("For encrypt or decrypt");
     passwordEdit->setEchoMode(QLineEdit::Password);
-    fileOpsLayout->addWidget(passwordEdit, 3, 1, 1, 2);
+    fileOpsLayout->addWidget(passwordEdit, 3, 1);
+    passwordVisibilityButton = new QPushButton("Show");
+    passwordVisibilityButton->setFixedWidth(selectInputButton->sizeHint().width());
+    fileOpsLayout->addWidget(passwordVisibilityButton, 3, 2);
     
     encodeButton = new QPushButton("Encode to Video");
     encodeButton->setIcon(QIcon::fromTheme("media-record"));
@@ -439,6 +445,17 @@ void DriveManagerUI::connectSignals() {
     connect(batchEncodeButton, &QPushButton::clicked, this, &DriveManagerUI::startBatchEncode);
     
     connect(clearLogsButton, &QPushButton::clicked, this, &DriveManagerUI::clearLogs);
+    connect(passwordVisibilityButton, &QPushButton::clicked, this, &DriveManagerUI::togglePasswordVisibility);
+}
+
+void DriveManagerUI::togglePasswordVisibility() {
+    if (passwordEdit->echoMode() == QLineEdit::Password) {
+        passwordEdit->setEchoMode(QLineEdit::Normal);
+        passwordVisibilityButton->setText("Hide");
+    } else {
+        passwordEdit->setEchoMode(QLineEdit::Password);
+        passwordVisibilityButton->setText("Show");
+    }
 }
 
 void DriveManagerUI::selectInputFile() {
