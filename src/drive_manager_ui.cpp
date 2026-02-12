@@ -71,6 +71,7 @@ void WorkerThread::run() {
             std::vector<std::vector<Packet>> all_chunk_packets(num_chunks);
             
             emit statusUpdated("Encoding chunks...");
+#pragma omp parallel for schedule(dynamic)
             for (int i = 0; i < static_cast<int>(num_chunks); ++i) {
                 auto chunk_data = chunkSpan(chunked, static_cast<std::size_t>(i));
                 std::span<const std::byte> data_to_encode = chunk_data;
@@ -82,9 +83,11 @@ void WorkerThread::run() {
                 const bool is_last = (i == static_cast<int>(num_chunks) - 1);
                 auto [chunk_packets, manifest] = encoder.encode_chunk(static_cast<uint32_t>(i), data_to_encode, is_last, encrypt);
                 all_chunk_packets[i] = std::move(chunk_packets);
-                
-                int progress = 30 + (60 * (i + 1) / static_cast<int>(num_chunks));
-                emit progressUpdated(progress);
+#pragma omp critical
+                {
+                    int progress = 30 + (60 * (i + 1) / static_cast<int>(num_chunks));
+                    emit progressUpdated(progress);
+                }
             }
             
             std::size_t total_packets = 0;

@@ -407,13 +407,39 @@ std::optional<std::vector<std::byte>> Decoder::assemble_file(const uint32_t expe
         return std::nullopt;
     }
 
-    std::vector<std::byte> result;
+    std::vector<std::size_t> chunk_sizes(expected_chunks);
+    for (uint32_t i = 0; i < expected_chunks; ++i) {
+        const auto &chunk = completed_chunks.at(i);
+        if (encrypted_ && decrypt_key_set_) {
+            if (chunk.size() < CRYPTO_PLAIN_SIZE_HEADER) {
+                return std::nullopt;
+            }
+            uint32_t plain_size = 0;
+            plain_size |= static_cast<uint32_t>(static_cast<uint8_t>(chunk[0]));
+            plain_size |= static_cast<uint32_t>(static_cast<uint8_t>(chunk[1])) << 8;
+            plain_size |= static_cast<uint32_t>(static_cast<uint8_t>(chunk[2])) << 16;
+            plain_size |= static_cast<uint32_t>(static_cast<uint8_t>(chunk[3])) << 24;
+            chunk_sizes[i] = plain_size;
+        } else {
+            chunk_sizes[i] = chunk.size();
+        }
+    }
+
+    std::vector<std::size_t> offsets(expected_chunks + 1);
+    offsets[0] = 0;
+    for (uint32_t i = 0; i < expected_chunks; ++i) {
+        offsets[i + 1] = offsets[i] + chunk_sizes[i];
+    }
+
+    std::vector<std::byte> result(offsets[expected_chunks]);
+
+#pragma omp parallel for schedule(static)
     for (uint32_t i = 0; i < expected_chunks; ++i) {
         std::vector<std::byte> chunk_data = completed_chunks.at(i);
         if (encrypted_ && decrypt_key_set_) {
             chunk_data = decrypt_chunk(chunk_data, decrypt_key_, *id, i);
         }
-        result.insert(result.end(), chunk_data.begin(), chunk_data.end());
+        std::memcpy(result.data() + offsets[i], chunk_data.data(), chunk_data.size());
     }
 
     return result;

@@ -3,12 +3,17 @@
 
 #include <sodium.h>
 #include <cstring>
+#include <mutex>
 #include <stdexcept>
 
+static std::once_flag sodium_init_flag;
+
 static void ensure_sodium_init() {
-    if (sodium_init() < 0) {
-        throw std::runtime_error("sodium_init failed");
-    }
+    std::call_once(sodium_init_flag, [] {
+        if (sodium_init() < 0) {
+            throw std::runtime_error("sodium_init failed");
+        }
+    });
 }
 
 std::array<std::byte, CRYPTO_KEY_BYTES> derive_key(
