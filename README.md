@@ -40,7 +40,7 @@ GUI. You may need to install some shared libraries (FFmpeg, Qt6, libsodium) to r
 sudo apt update
 sudo apt install cmake build-essential qt6-base-dev \
   libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libswresample-dev \
-  libsodium-dev libomp-dev
+  libsodium-dev libomp-dev ffmpeg
 ```
 
 ### Fedora/CentOS
