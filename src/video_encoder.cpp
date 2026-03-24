@@ -24,11 +24,15 @@
 #include <stdexcept>
 
 FrameLayout compute_frame_layout() {
+    return compute_frame_layout(FRAME_WIDTH, FRAME_HEIGHT);
+}
+
+FrameLayout compute_frame_layout(const int width, const int height) {
     FrameLayout layout{};
-    layout.frame_width = FRAME_WIDTH;
-    layout.frame_height = FRAME_HEIGHT;
-    layout.blocks_per_row = FRAME_WIDTH / 8;
-    layout.blocks_per_col = FRAME_HEIGHT / 8;
+    layout.frame_width = width;
+    layout.frame_height = height;
+    layout.blocks_per_row = width / 8;
+    layout.blocks_per_col = height / 8;
     layout.total_blocks = layout.blocks_per_row * layout.blocks_per_col;
     layout.bits_per_frame = layout.total_blocks * BITS_PER_BLOCK;
     layout.bytes_per_frame = layout.bits_per_frame / 8;

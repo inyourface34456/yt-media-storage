@@ -31,6 +31,7 @@
 #include <QGroupBox>
 #include <QLineEdit>
 #include <QComboBox>
+#include <QSpinBox>
 #include <QTimer>
 #include <QThread>
 #include <QCheckBox>
@@ -43,11 +44,16 @@ class WorkerThread : public QThread {
 public:
     enum Operation {
         Encode,
-        Decode
+        Decode,
+        StreamEncode,
+        StreamDecode
     };
 
     WorkerThread(Operation op, const QString &input, const QString &output,
-                 bool encrypt = false, const QString &password = QString(), QObject *parent = nullptr);
+                 bool encrypt = false, const QString &password = QString(),
+                 const QString &streamUrl = QString(), int bitrate = 35000,
+                 int streamWidth = 1920, int streamHeight = 1080,
+                 QObject *parent = nullptr);
 
 signals:
     void progressUpdated(int percentage);
@@ -67,6 +73,10 @@ private:
     QString outputPath;
     bool encrypt;
     QString password;
+    QString streamUrl;
+    int bitrate;
+    int streamWidth;
+    int streamHeight;
 };
 
 class DriveManagerUI : public QMainWindow {
@@ -92,6 +102,14 @@ slots:
     void startDecode();
 
     void startBatchEncode();
+
+    void startStreamEncode();
+
+    void startStreamDecode();
+
+    void onPlatformChanged(int index) const;
+
+    void onResolutionChanged(int index) const;
 
     void clearLogs() const;
 
@@ -155,6 +173,16 @@ private:
     QPushButton *batchEncodeButton;
     QLineEdit *batchOutputDirEdit;
     QPushButton *batchOutputButton;
+
+    // Streaming
+    QGroupBox *streamGroup;
+    QComboBox *platformCombo;
+    QLineEdit *streamUrlEdit;
+    QLineEdit *streamKeyEdit;
+    QSpinBox *bitrateSpinBox;
+    QComboBox *resolutionCombo;
+    QPushButton *streamEncodeButton;
+    QPushButton *streamDecodeButton;
 
     // Right panel - Status and logs
     QGroupBox *statusGroup;

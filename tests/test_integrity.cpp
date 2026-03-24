@@ -18,6 +18,7 @@
 
 #include "integrity.h"
 
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -43,7 +44,7 @@ bool is_hex_char(const char ch) {
 } // namespace
 
 TEST(Integrity, Sha256_EmptyInput) {
-    constexpr std::vector<std::byte> empty_input;
+    const std::vector<std::byte> empty_input;
     const Sha256Digest digest = sha256(empty_input);
     const std::string hex_output = digest.hexValue();
     EXPECT_EQ(hex_output, "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855");

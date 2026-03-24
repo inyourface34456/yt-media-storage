@@ -94,6 +94,36 @@ typedef struct {
 } ms_decode_options_t;
 
 typedef struct {
+    const char *input_path;
+    const char *stream_url;
+
+    int encrypt;
+    const char *password;
+    size_t password_len;
+
+    ms_hash_algorithm_t hash_algorithm;
+    int bitrate_kbps;
+    int width;
+    int height;
+
+    ms_progress_fn progress;
+    void *progress_user;
+} ms_stream_encode_options_t;
+
+typedef struct {
+    const char *stream_url;
+    const char *output_path;
+
+    const char *password;
+    size_t password_len;
+
+    int timeout_sec;
+
+    ms_progress_fn progress;
+    void *progress_user;
+} ms_stream_decode_options_t;
+
+typedef struct {
     uint64_t input_size;
     uint64_t output_size;
     uint64_t total_chunks;
@@ -118,6 +148,24 @@ MS_API ms_status_t ms_encode(const ms_encode_options_t *options, ms_result_t *re
  * @return         MS_OK on success, or an error code.
  */
 MS_API ms_status_t ms_decode(const ms_decode_options_t *options, ms_result_t *result);
+
+/**
+ * Encode a file and stream it via RTMP to Twitch/YouTube/etc.
+ *
+ * @param options  Stream encoding parameters (input path, RTMP URL, bitrate, etc.).
+ * @param result   Optional pointer to receive statistics about the operation.
+ * @return         MS_OK on success, or an error code.
+ */
+MS_API ms_status_t ms_stream_encode(const ms_stream_encode_options_t *options, ms_result_t *result);
+
+/**
+ * Decode a live stream back into the original file.
+ *
+ * @param options  Stream decoding parameters (stream URL, output path, etc.).
+ * @param result   Optional pointer to receive statistics about the operation.
+ * @return         MS_OK on success, or an error code.
+ */
+MS_API ms_status_t ms_stream_decode(const ms_stream_decode_options_t *options, ms_result_t *result);
 
 /**
  * Return a human-readable string for the given status code.

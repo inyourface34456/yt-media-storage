@@ -31,9 +31,12 @@
 #include <QDateTime>
 
 WorkerThread::WorkerThread(const Operation op, const QString &input, const QString &output,
-                           const bool encrypt, const QString &password, QObject *parent)
+                           const bool encrypt, const QString &password,
+                           const QString &streamUrl, const int bitrate,
+                           const int streamWidth, const int streamHeight, QObject *parent)
     : QThread(parent), operation(op), inputPath(input), outputPath(output),
-      encrypt(encrypt), password(password) {
+      encrypt(encrypt), password(password), streamUrl(streamUrl), bitrate(bitrate),
+      streamWidth(streamWidth), streamHeight(streamHeight) {
 }
 
 static int gui_encode_progress(const uint64_t current, const uint64_t total, void *user) {
@@ -50,6 +53,26 @@ static int gui_decode_progress(const uint64_t current, const uint64_t total, voi
     if (total > 0) {
         const int pct = 10 + static_cast<int>(70 * current / total);
         emit thread->progressUpdated(pct);
+    }
+    return 0;
+}
+
+static int gui_stream_encode_progress(const uint64_t current, const uint64_t total, void *user) {
+    auto *thread = static_cast<WorkerThread *>(user);
+    if (total > 0) {
+        const int pct = 5 + static_cast<int>(90 * (current + 1) / total);
+        emit thread->progressUpdated(pct);
+    }
+    return 0;
+}
+
+static int gui_stream_decode_progress(const uint64_t current, const uint64_t total, void *user) {
+    auto *thread = static_cast<WorkerThread *>(user);
+    if (total > 0) {
+        const int pct = 10 + static_cast<int>(70 * current / total);
+        emit thread->progressUpdated(pct);
+    } else if (current > 0) {
+        emit thread->progressUpdated(std::min(static_cast<int>(current % 90) + 10, 95));
     }
     return 0;
 }
@@ -113,6 +136,69 @@ void WorkerThread::run() {
             emit operationCompleted(true, "Decoding completed successfully");
         } else {
             emit operationCompleted(false, QString("Error: %1").arg(ms_status_string(status)));
+        }
+    } else if (operation == StreamEncode) {
+        const std::string url = streamUrl.toStdString();
+        emit statusUpdated("Starting stream encode...");
+        emit logMessage("Stream encode: " + inputPath + " -> " + streamUrl);
+        emit logMessage(QString("Resolution: %1x%2").arg(streamWidth).arg(streamHeight));
+        emit logMessage(QString("Bitrate: %1 kbps").arg(bitrate));
+        if (encrypt) {
+            emit logMessage("Encrypting chunks with password");
+        }
+        emit progressUpdated(5);
+
+        ms_stream_encode_options_t opts{};
+        opts.input_path = input.c_str();
+        opts.stream_url = url.c_str();
+        opts.encrypt = encrypt ? 1 : 0;
+        opts.password = pw.c_str();
+        opts.password_len = pw.size();
+        opts.hash_algorithm = MS_HASH_CRC32;
+        opts.bitrate_kbps = bitrate;
+        opts.width = streamWidth;
+        opts.height = streamHeight;
+        opts.progress = gui_stream_encode_progress;
+        opts.progress_user = this;
+
+        ms_result_t result{};
+
+        if (const ms_status_t status = ms_stream_encode(&opts, &result); status == MS_OK) {
+            emit logMessage(QString("Input size: %1 bytes").arg(result.input_size));
+            emit logMessage(QString("Chunks: %1").arg(result.total_chunks));
+            emit logMessage(QString("Streamed %1 packets in %2 frames")
+                .arg(result.total_packets).arg(result.total_frames));
+            emit progressUpdated(100);
+            emit operationCompleted(true, "Stream encode completed successfully");
+        } else {
+            emit operationCompleted(false, QString("Stream encode error: %1").arg(ms_status_string(status)));
+        }
+    } else if (operation == StreamDecode) {
+        const std::string url = streamUrl.toStdString();
+        emit statusUpdated("Waiting for stream...");
+        emit logMessage("Stream decode: " + streamUrl + " -> " + outputPath);
+        emit progressUpdated(5);
+
+        ms_stream_decode_options_t opts{};
+        opts.stream_url = url.c_str();
+        opts.output_path = output.c_str();
+        opts.password = pw.c_str();
+        opts.password_len = pw.size();
+        opts.timeout_sec = 30;
+        opts.progress = gui_stream_decode_progress;
+        opts.progress_user = this;
+
+        ms_result_t result{};
+
+        if (const ms_status_t status = ms_stream_decode(&opts, &result); status == MS_OK) {
+            emit logMessage(QString("Packets extracted: %1").arg(result.total_packets));
+            emit logMessage(QString("Chunks decoded: %1").arg(result.total_chunks));
+            emit logMessage(QString("Frames: %1").arg(result.total_frames));
+            emit logMessage(QString("Output size: %1 bytes").arg(result.output_size));
+            emit progressUpdated(100);
+            emit operationCompleted(true, "Stream decode completed successfully");
+        } else {
+            emit operationCompleted(false, QString("Stream decode error: %1").arg(ms_status_string(status)));
         }
     }
 }
@@ -224,6 +310,55 @@ void DriveManagerUI::setupUI() {
 
     leftLayout->addWidget(batchGroup);
 
+    // Streaming group
+    streamGroup = new QGroupBox("Streaming (Twitch / YouTube)");
+    auto *streamLayout = new QGridLayout(streamGroup);
+
+    streamLayout->addWidget(new QLabel("Platform:"), 0, 0);
+    platformCombo = new QComboBox();
+    platformCombo->addItem("Twitch", "rtmp://live.twitch.tv/app/");
+    platformCombo->addItem("YouTube", "rtmp://a.rtmp.youtube.com/live2/");
+    platformCombo->addItem("Custom", "");
+    streamLayout->addWidget(platformCombo, 0, 1, 1, 2);
+
+    streamLayout->addWidget(new QLabel("RTMP URL:"), 1, 0);
+    streamUrlEdit = new QLineEdit();
+    streamUrlEdit->setPlaceholderText("rtmp://live.twitch.tv/app/");
+    streamUrlEdit->setText("rtmp://live.twitch.tv/app/");
+    streamLayout->addWidget(streamUrlEdit, 1, 1, 1, 2);
+
+    streamLayout->addWidget(new QLabel("Stream Key:"), 2, 0);
+    streamKeyEdit = new QLineEdit();
+    streamKeyEdit->setPlaceholderText("Your stream key");
+    streamKeyEdit->setEchoMode(QLineEdit::Password);
+    streamLayout->addWidget(streamKeyEdit, 2, 1, 1, 2);
+
+    streamLayout->addWidget(new QLabel("Resolution:"), 3, 0);
+    resolutionCombo = new QComboBox();
+    resolutionCombo->addItem("1080p (1920x1080)", QSize(1920, 1080));
+    resolutionCombo->addItem("1440p (2560x1440)", QSize(2560, 1440));
+    resolutionCombo->addItem("4K (3840x2160)", QSize(3840, 2160));
+    resolutionCombo->setCurrentIndex(0);
+    streamLayout->addWidget(resolutionCombo, 3, 1, 1, 2);
+
+    streamLayout->addWidget(new QLabel("Bitrate (kbps):"), 4, 0);
+    bitrateSpinBox = new QSpinBox();
+    bitrateSpinBox->setRange(1000, 50000);
+    bitrateSpinBox->setValue(8000);
+    bitrateSpinBox->setSingleStep(1000);
+    bitrateSpinBox->setSuffix(" kbps");
+    streamLayout->addWidget(bitrateSpinBox, 4, 1, 1, 2);
+
+    streamEncodeButton = new QPushButton("Stream Encode");
+    streamEncodeButton->setIcon(QIcon::fromTheme("network-transmit"));
+    streamLayout->addWidget(streamEncodeButton, 5, 0, 1, 3);
+
+    streamDecodeButton = new QPushButton("Stream Decode");
+    streamDecodeButton->setIcon(QIcon::fromTheme("network-receive"));
+    streamLayout->addWidget(streamDecodeButton, 6, 0, 1, 3);
+
+    leftLayout->addWidget(streamGroup);
+
     // Right panel
     auto *rightPanel = new QWidget();
     auto *rightLayout = new QVBoxLayout(rightPanel);
@@ -305,6 +440,13 @@ void DriveManagerUI::connectSignals() {
 
     connect(clearLogsButton, &QPushButton::clicked, this, &DriveManagerUI::clearLogs);
     connect(passwordVisibilityButton, &QPushButton::clicked, this, &DriveManagerUI::togglePasswordVisibility);
+
+    connect(streamEncodeButton, &QPushButton::clicked, this, &DriveManagerUI::startStreamEncode);
+    connect(streamDecodeButton, &QPushButton::clicked, this, &DriveManagerUI::startStreamDecode);
+    connect(platformCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &DriveManagerUI::onPlatformChanged);
+    connect(resolutionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &DriveManagerUI::onResolutionChanged);
 }
 
 void DriveManagerUI::togglePasswordVisibility() const {
@@ -388,7 +530,8 @@ void DriveManagerUI::startEncode() {
 
     workerThread = std::make_unique<WorkerThread>(WorkerThread::Encode,
                                                   inputFileEdit->text(), outputFileEdit->text(), encrypt,
-                                                  passwordEdit->text(), this);
+                                                  passwordEdit->text(), QString(), 35000,
+                                                  0, 0, this);
 
     connect(workerThread.get(), &WorkerThread::progressUpdated,
             this, &DriveManagerUI::onProgressUpdated);
@@ -419,7 +562,8 @@ void DriveManagerUI::startDecode() {
 
     workerThread = std::make_unique<WorkerThread>(WorkerThread::Decode,
                                                   inputFileEdit->text(), outputFileEdit->text(), false,
-                                                  passwordEdit->text(), this);
+                                                  passwordEdit->text(), QString(), 35000,
+                                                  0, 0, this);
 
     connect(workerThread.get(), &WorkerThread::progressUpdated,
             this, &DriveManagerUI::onProgressUpdated);
@@ -463,6 +607,121 @@ void DriveManagerUI::startBatchEncode() {
     }
 }
 
+void DriveManagerUI::onPlatformChanged(const int index) const {
+    const QString baseUrl = platformCombo->itemData(index).toString();
+    streamUrlEdit->setText(baseUrl);
+    streamUrlEdit->setReadOnly(index != 2);
+}
+
+void DriveManagerUI::onResolutionChanged(const int index) const {
+    if (const QSize res = resolutionCombo->itemData(index).toSize(); res.height() <= 1080)
+        bitrateSpinBox->setValue(8000); // adaptive bitrate
+    else if (res.height() <= 1440)
+        bitrateSpinBox->setValue(16000);
+    else
+        bitrateSpinBox->setValue(35000);
+}
+
+void DriveManagerUI::startStreamEncode() {
+    if (isOperationRunning) {
+        QMessageBox::warning(this, "Warning", "An operation is already in progress");
+        return;
+    }
+
+    if (inputFileEdit->text().isEmpty()) {
+        QMessageBox::warning(this, "Warning", "Please select an input file");
+        return;
+    }
+
+    if (!QFile::exists(inputFileEdit->text())) {
+        QMessageBox::warning(this, "Warning", "Input file does not exist");
+        return;
+    }
+
+    if (streamKeyEdit->text().isEmpty()) {
+        QMessageBox::warning(this, "Warning", "Please enter your stream key");
+        return;
+    }
+
+    const QString fullUrl = streamUrlEdit->text() + streamKeyEdit->text();
+
+    const bool encrypt = encryptCheckBox->isChecked();
+    if (encrypt && passwordEdit->text().isEmpty()) {
+        QMessageBox::warning(this, "Warning", "Password required when encrypting");
+        return;
+    }
+
+    isOperationRunning = true;
+    currentOperation = "Stream Encoding";
+    encodeButton->setEnabled(false);
+    decodeButton->setEnabled(false);
+    streamEncodeButton->setEnabled(false);
+    streamDecodeButton->setEnabled(false);
+
+    const QSize res = resolutionCombo->currentData().toSize();
+    workerThread = std::make_unique<WorkerThread>(WorkerThread::StreamEncode,
+                                                  inputFileEdit->text(), QString(), encrypt,
+                                                  passwordEdit->text(), fullUrl,
+                                                  bitrateSpinBox->value(),
+                                                  res.width(), res.height(), this);
+
+    connect(workerThread.get(), &WorkerThread::progressUpdated,
+            this, &DriveManagerUI::onProgressUpdated);
+    connect(workerThread.get(), &WorkerThread::statusUpdated,
+            this, &DriveManagerUI::onStatusUpdated);
+    connect(workerThread.get(), &WorkerThread::operationCompleted,
+            this, &DriveManagerUI::onOperationCompleted);
+    connect(workerThread.get(), &WorkerThread::logMessage,
+            this, &DriveManagerUI::onLogMessage);
+
+    workerThread->start();
+}
+
+void DriveManagerUI::startStreamDecode() {
+    if (isOperationRunning) {
+        QMessageBox::warning(this, "Warning", "An operation is already in progress");
+        return;
+    }
+
+    if (outputFileEdit->text().isEmpty()) {
+        QMessageBox::warning(this, "Warning", "Please select an output file");
+        return;
+    }
+
+    QString decodeUrl;
+    if (!streamKeyEdit->text().isEmpty()) {
+        decodeUrl = streamUrlEdit->text() + streamKeyEdit->text();
+    } else if (!streamUrlEdit->text().isEmpty()) {
+        decodeUrl = streamUrlEdit->text();
+    } else {
+        QMessageBox::warning(this, "Warning", "Please enter a stream URL to decode from");
+        return;
+    }
+
+    isOperationRunning = true;
+    currentOperation = "Stream Decoding";
+    encodeButton->setEnabled(false);
+    decodeButton->setEnabled(false);
+    streamEncodeButton->setEnabled(false);
+    streamDecodeButton->setEnabled(false);
+
+    workerThread = std::make_unique<WorkerThread>(WorkerThread::StreamDecode,
+                                                  QString(), outputFileEdit->text(), false,
+                                                  passwordEdit->text(), decodeUrl,
+                                                  0, 0, 0, this);
+
+    connect(workerThread.get(), &WorkerThread::progressUpdated,
+            this, &DriveManagerUI::onProgressUpdated);
+    connect(workerThread.get(), &WorkerThread::statusUpdated,
+            this, &DriveManagerUI::onStatusUpdated);
+    connect(workerThread.get(), &WorkerThread::operationCompleted,
+            this, &DriveManagerUI::onOperationCompleted);
+    connect(workerThread.get(), &WorkerThread::logMessage,
+            this, &DriveManagerUI::onLogMessage);
+
+    workerThread->start();
+}
+
 void DriveManagerUI::clearLogs() const {
     logTextEdit->clear();
     logMessage("Logs cleared");
@@ -489,6 +748,8 @@ void DriveManagerUI::onOperationCompleted(const bool success, const QString &mes
     isOperationRunning = false;
     encodeButton->setEnabled(true);
     decodeButton->setEnabled(true);
+    streamEncodeButton->setEnabled(true);
+    streamDecodeButton->setEnabled(true);
 
     if (success) {
         logMessage("✓ " + message);

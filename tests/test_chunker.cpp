@@ -85,7 +85,7 @@ void expect_chunks_cover_data(const ChunkedStorageData &chunked,
 } // namespace
 
 TEST(Chunker, ChunkByteData_EmptyInput) {
-    constexpr std::vector<std::byte> empty_data;
+    const std::vector<std::byte> empty_data;
     const std::span empty_span(empty_data.data(), empty_data.size());
     const auto [storage, chunks] = chunkByteData(empty_span);
     ASSERT_EQ(chunks.size(), 1u);

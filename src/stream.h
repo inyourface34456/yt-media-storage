@@ -26,30 +26,27 @@ extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
 #include <libavutil/imgutils.h>
+#include <libavutil/opt.h>
 #include <libswscale/swscale.h>
 }
 
 #include "configuration.h"
 #include "encoder.h"
 
-FrameLayout compute_frame_layout();
-FrameLayout compute_frame_layout(int width, int height);
-
-std::size_t max_packet_bytes_per_frame();
-
-class VideoEncoder {
+class StreamEncoder {
 public:
-    explicit VideoEncoder(const std::string &output_path);
+    explicit StreamEncoder(const std::string &rtmp_url, int bitrate_kbps = 35000,
+                           int width = FRAME_WIDTH, int height = FRAME_HEIGHT);
 
-    ~VideoEncoder();
+    ~StreamEncoder();
 
-    VideoEncoder(const VideoEncoder &) = delete;
+    StreamEncoder(const StreamEncoder &) = delete;
 
-    VideoEncoder &operator=(const VideoEncoder &) = delete;
+    StreamEncoder &operator=(const StreamEncoder &) = delete;
 
-    VideoEncoder(VideoEncoder &&) = delete;
+    StreamEncoder(StreamEncoder &&) = delete;
 
-    VideoEncoder &operator=(VideoEncoder &&) = delete;
+    StreamEncoder &operator=(StreamEncoder &&) = delete;
 
     void add_packet(const Packet &packet);
 
@@ -57,25 +54,39 @@ public:
 
     void finalize();
 
-    [[nodiscard]] int64_t frames_written() const { return frame_index; }
+    [[nodiscard]] int64_t frames_written() const { return frame_index_; }
 
     [[nodiscard]] static int packets_per_frame();
 
 private:
-    AVFormatContext *format_ctx = nullptr;
-    AVCodecContext *codec_ctx = nullptr;
-    AVStream *stream = nullptr;
-    AVFrame *frame = nullptr;
-    AVPacket *av_packet = nullptr;
-    SwsContext *sws_ctx = nullptr;
+    AVFormatContext *format_ctx_ = nullptr;
 
-    std::vector<uint8_t> gray_buffer;
-    std::vector<std::byte> frame_data_buffer;
+    AVCodecContext *video_codec_ctx_ = nullptr;
+    AVStream *video_stream_ = nullptr;
+    AVFrame *frame_ = nullptr;
+    SwsContext *sws_ctx_ = nullptr;
+
+    AVCodecContext *audio_codec_ctx_ = nullptr;
+    AVStream *audio_stream_ = nullptr;
+    AVFrame *audio_frame_ = nullptr;
+    int64_t audio_pts_ = 0;
+
+    AVPacket *av_packet_ = nullptr;
+
+    int width_;
+    int height_;
+
+    std::vector<uint8_t> gray_buffer_;
+    std::vector<std::byte> frame_data_buffer_;
     FrameLayout layout_{};
-    int64_t frame_index = 0;
-    bool finalized = false;
+    int64_t frame_index_ = 0;
+    bool finalized_ = false;
 
-    void init_encoder(const std::string &output_path);
+    void init_stream(const std::string &rtmp_url, int bitrate_kbps);
+
+    void init_audio_encoder();
+
+    void write_audio_up_to(int64_t video_pts);
 
     void embed_data_in_frame(const std::vector<std::byte> &data);
 

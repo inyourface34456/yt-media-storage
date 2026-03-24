@@ -118,7 +118,7 @@ void VideoDecoder::init_decoder(const std::string &input_path) {
         }
     }
 
-    layout_ = compute_frame_layout();
+    layout_ = compute_frame_layout(codec_ctx_->width, codec_ctx_->height);
 }
 
 int64_t VideoDecoder::total_frames() const {

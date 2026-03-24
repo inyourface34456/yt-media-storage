@@ -48,11 +48,30 @@ static int decode_progress(const uint64_t current, const uint64_t total, void *)
     return 0;
 }
 
+static int stream_encode_progress(const uint64_t current, const uint64_t total, void *) {
+    if (total > 0) {
+        std::cout << "\rStreaming chunk " << (current + 1) << "/" << total << "..." << std::flush;
+    }
+    return 0;
+}
+
+static int stream_decode_progress(const uint64_t current, const uint64_t total, void *) {
+    if (total > 0) {
+        std::cout << "\rReceiving frame " << current << "/" << total << "..." << std::flush;
+    } else {
+        std::cout << "\rReceiving frame " << current << "..." << std::flush;
+    }
+    return 0;
+}
+
 static void print_usage(const char *program) {
     std::cerr << "Usage:\n"
             << "  " << program <<
             " encode --input <file> --output <video> [--encrypt --password <pwd>] [--hash <crc32|xxhash>]\n"
-            << "  " << program << " decode --input <video> --output <file> [--password <pwd>]\n";
+            << "  " << program << " decode --input <video> --output <file> [--password <pwd>]\n"
+            << "  " << program <<
+            " stream-encode --input <file> --url <rtmp://...> [--bitrate <kbps>] [--width <w> --height <h>] [--encrypt --password <pwd>]\n"
+            << "  " << program << " stream-decode --url <stream_url> --output <file> [--password <pwd>]\n";
 }
 
 static int do_encode(const std::string &input_path, const std::string &output_path,
@@ -118,6 +137,74 @@ static int do_decode(const std::string &input_path, const std::string &output_pa
     return 0;
 }
 
+static int do_stream_encode(const std::string &input_path, const std::string &stream_url,
+                            const bool encrypt, const std::string &password,
+                            const ms_hash_algorithm_t hash_algo, const int bitrate_kbps,
+                            const int width, const int height) {
+    std::cout << "Input: " << input_path << "\n";
+    std::cout << "Stream URL: " << stream_url << "\n";
+    std::cout << "Resolution: " << width << "x" << height << "\n";
+    std::cout << "Bitrate: " << bitrate_kbps << " kbps\n";
+
+    ms_stream_encode_options_t opts{};
+    opts.input_path = input_path.c_str();
+    opts.stream_url = stream_url.c_str();
+    opts.encrypt = encrypt ? 1 : 0;
+    opts.password = password.c_str();
+    opts.password_len = password.size();
+    opts.hash_algorithm = hash_algo;
+    opts.bitrate_kbps = bitrate_kbps;
+    opts.width = width;
+    opts.height = height;
+    opts.progress = stream_encode_progress;
+    opts.progress_user = nullptr;
+
+    ms_result_t result{};
+    if (const ms_status_t status = ms_stream_encode(&opts, &result); status != MS_OK) {
+        std::cout << "\n";
+        std::cerr << "Error: " << ms_status_string(status) << "\n";
+        return 1;
+    }
+
+    std::cout << "\n\nStream encode complete: " << format_size(result.input_size) << "\n";
+    std::cout << "Chunks: " << result.total_chunks
+            << "  Packets: " << result.total_packets
+            << "  Frames: " << result.total_frames << "\n";
+
+    return 0;
+}
+
+static int do_stream_decode(const std::string &stream_url, const std::string &output_path,
+                            const std::string &password) {
+    std::cout << "Stream URL: " << stream_url << "\n";
+    std::cout << "Output: " << output_path << "\n";
+    std::cout << "Waiting for stream...\n";
+
+    ms_stream_decode_options_t opts{};
+    opts.stream_url = stream_url.c_str();
+    opts.output_path = output_path.c_str();
+    opts.password = password.c_str();
+    opts.password_len = password.size();
+    opts.timeout_sec = 30;
+    opts.progress = stream_decode_progress;
+    opts.progress_user = nullptr;
+
+    ms_result_t result{};
+    if (const ms_status_t status = ms_stream_decode(&opts, &result); status != MS_OK) {
+        std::cout << "\n";
+        std::cerr << "Error: " << ms_status_string(status) << "\n";
+        return 1;
+    }
+
+    std::cout << "\n\nStream decode complete: -> " << format_size(result.output_size) << "\n";
+    std::cout << "Chunks: " << result.total_chunks
+            << "  Packets: " << result.total_packets
+            << "  Frames: " << result.total_frames << "\n";
+    std::cout << "Written to: " << output_path << "\n";
+
+    return 0;
+}
+
 int main(const int argc, char *argv[]) {
     if (argc < 2) {
         print_usage(argv[0]);
@@ -126,7 +213,8 @@ int main(const int argc, char *argv[]) {
 
     const std::string command = argv[1];
 
-    if (command != "encode" && command != "decode") {
+    if (command != "encode" && command != "decode" &&
+        command != "stream-encode" && command != "stream-decode") {
         std::cerr << "Error: unknown command '" << command << "'\n";
         print_usage(argv[0]);
         return 1;
@@ -134,15 +222,27 @@ int main(const int argc, char *argv[]) {
 
     std::string input_path;
     std::string output_path;
+    std::string stream_url;
     bool encrypt = false;
     std::string password;
     auto hash_algo = MS_HASH_CRC32;
+    int bitrate_kbps = 35000;
+    int stream_width = 1920;
+    int stream_height = 1080;
 
     for (int i = 2; i < argc; ++i) {
         if (const std::string arg = argv[i]; (arg == "--input" || arg == "-i") && i + 1 < argc) {
             input_path = argv[++i];
         } else if ((arg == "--output" || arg == "-o") && i + 1 < argc) {
             output_path = argv[++i];
+        } else if ((arg == "--url" || arg == "-u") && i + 1 < argc) {
+            stream_url = argv[++i];
+        } else if ((arg == "--bitrate" || arg == "-b") && i + 1 < argc) {
+            bitrate_kbps = std::stoi(argv[++i]);
+        } else if (arg == "--width" && i + 1 < argc) {
+            stream_width = std::stoi(argv[++i]);
+        } else if (arg == "--height" && i + 1 < argc) {
+            stream_height = std::stoi(argv[++i]);
         } else if ((arg == "--encrypt" || arg == "-e")) {
             encrypt = true;
         } else if ((arg == "--password" || arg == "-p") && i + 1 < argc) {
@@ -163,20 +263,42 @@ int main(const int argc, char *argv[]) {
         }
     }
 
-    if (input_path.empty() || output_path.empty()) {
-        std::cerr << "Error: both --input and --output must be specified\n";
-        print_usage(argv[0]);
-        return 1;
-    }
-
-    if (encrypt && password.empty()) {
-        std::cerr << "Error: --encrypt requires --password\n";
-        return 1;
-    }
-
     if (command == "encode") {
+        if (input_path.empty() || output_path.empty()) {
+            std::cerr << "Error: both --input and --output must be specified\n";
+            print_usage(argv[0]);
+            return 1;
+        }
+        if (encrypt && password.empty()) {
+            std::cerr << "Error: --encrypt requires --password\n";
+            return 1;
+        }
         return do_encode(input_path, output_path, encrypt, password, hash_algo);
-    } else {
+    } else if (command == "decode") {
+        if (input_path.empty() || output_path.empty()) {
+            std::cerr << "Error: both --input and --output must be specified\n";
+            print_usage(argv[0]);
+            return 1;
+        }
         return do_decode(input_path, output_path, password);
+    } else if (command == "stream-encode") {
+        if (input_path.empty() || stream_url.empty()) {
+            std::cerr << "Error: --input and --url must be specified for stream-encode\n";
+            print_usage(argv[0]);
+            return 1;
+        }
+        if (encrypt && password.empty()) {
+            std::cerr << "Error: --encrypt requires --password\n";
+            return 1;
+        }
+        return do_stream_encode(input_path, stream_url, encrypt, password, hash_algo, bitrate_kbps,
+                                stream_width, stream_height);
+    } else {
+        if (stream_url.empty() || output_path.empty()) {
+            std::cerr << "Error: --url and --output must be specified for stream-decode\n";
+            print_usage(argv[0]);
+            return 1;
+        }
+        return do_stream_decode(stream_url, output_path, password);
     }
 }

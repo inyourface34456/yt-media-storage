@@ -14,6 +14,7 @@ both a command-line interface and a graphical user interface.
 
 - **File Encoding/Decoding**: Encode any file into a lossless video (FFV1/MKV) and then decode it back to the original
   file
+- **Live Streaming**: Stream-encode files to Twitch/YouTube via RTMP (H.264) and decode them back from the stream or VOD
 - **Fountain Codes**: Uses [Wirehair](https://github.com/catid/wirehair) fountain codes for redundancy and repair
 - **Optional Encryption**: Encrypt files with a password using libsodium (XChaCha20-Poly1305)
 - **Selectable Checksum**: Choose between CRC32 (default) and [xxHash32](https://github.com/Cyan4973/xxHash) for packet
@@ -31,7 +32,7 @@ GUI. You may need to install some shared libraries (FFmpeg, Qt6, libsodium) to r
 
 - CMake 3.22
 - C++23 compiler
-- FFmpeg
+- FFmpeg (with libx264 for streaming)
 - libsodium
 - OpenMP
 - Qt6 (Core and Widgets)
@@ -107,17 +108,43 @@ Or run the test binary directly for verbose output:
 
 ### CLI
 
+#### Lossless Video (Local Files)
+
 ```
 ./media_storage encode --input <file> --output <video> [--encrypt --password <pwd>] [--hash <crc32|xxhash>]
 ./media_storage decode --input <video> --output <file> [--password <pwd>]
+```
+
+#### Live Streaming (Twitch / YouTube)
+
+```
+./media_storage stream-encode --input <file> --url <rtmp://...> [--bitrate <kbps>] [--width <w> --height <h>] [--encrypt --password <pwd>]
+./media_storage stream-decode --url <stream_url> --output <file> [--password <pwd>]
+```
+
+Stream-decode supports a 30-second retry window, so you can start it before the encoder begins streaming.
+
+**Example — stream to Twitch at 1080p:**
+
+```bash
+# Terminal 1: start decoder first (waits for stream)
+./media_storage stream-decode --url stream_playback_url --output decoded.bin
+
+# Terminal 2: start encoder
+# You must use yt-dlp to get the raw Twitch or YouTube Stream URL
+./media_storage stream-encode --input myfile.bin --url rtmp://... --width 1920 --height 1080 --bitrate 8000
 ```
 
 #### Options
 
 | Flag         | Short | Description                                                     |
 |--------------|-------|-----------------------------------------------------------------|
-| `--input`    | `-i`  | Input file path (required)                                      |
-| `--output`   | `-o`  | Output file path (required)                                     |
+| `--input`    | `-i`  | Input file path (required for encode)                           |
+| `--output`   | `-o`  | Output file path (required for decode)                          |
+| `--url`      | `-u`  | RTMP stream URL (streaming only)                                |
+| `--bitrate`  | `-b`  | Stream bitrate in kbps (default: 8000 for 1080p)                |
+| `--width`    |       | Stream video width (default: 1920)                              |
+| `--height`   |       | Stream video height (default: 1080)                             |
 | `--encrypt`  | `-e`  | Enable encryption (encode only)                                 |
 | `--password` | `-p`  | Password for encryption/decryption                              |
 | `--hash`     | `-H`  | Checksum algorithm: `crc32` (default) or `xxhash` (encode only) |
@@ -148,6 +175,14 @@ no need to specify it again.
 1. Click "Add Files" to add multiple files to the batch queue
 2. Select an output directory for all encoded videos
 3. Click "Batch Encode All" to process all files in sequence
+
+#### Streaming
+
+1. Select a platform (Twitch, YouTube, or Custom)
+2. Enter your stream key
+3. Choose a resolution (1080p, 1440p, or 4K), and change bitrate if needed
+4. Select an input file and click "Stream Encode" to start streaming
+5. To decode a stream, enter the stream URL and click "Stream Decode"
 
 #### Monitoring
 
@@ -209,10 +244,10 @@ target_link_libraries(your_app PRIVATE media_storage_lib)
 
 - **Encoding**: Files are chunked, encoded with fountain codes, and embedded into video frames
 - **Decoding**: Packets are extracted from video frames and reconstructed into the original file
-- **Video Format**: FFV1 codec in MKV container (lossless)
-- **Frame Resolution**: 3840x2160 (4K) at 30 FPS
+- **Lossless Format**: FFV1 codec in MKV container at 3840x2160 (4K), 30 FPS
+- **Streaming Format**: H.264 (libx264) in FLV container via RTMP, with configurable resolution and bitrate
 - **Encryption**: Optional XChaCha20-Poly1305 via libsodium
-- **Checksums**: CRC32-MPEG2 (default) or xxHash32 (streaming) per packet; algorithm is stored in the packet flags for
+- **Checksums**: CRC32-MPEG2 (default) or xxHash32 per packet; algorithm is stored in the packet flags for
   self-describing decode
 
 ## Troubleshooting

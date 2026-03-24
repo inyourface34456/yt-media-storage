@@ -20,6 +20,7 @@ add_executable(media_storage_tests
         test_codec.cpp
         test_crypto.cpp
         test_roundtrip.cpp
+        test_stream.cpp
 )
 
 target_link_libraries(media_storage_tests PRIVATE
