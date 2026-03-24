@@ -4,8 +4,6 @@
 
 # Media Storage
 
-[![Star History Chart](https://api.star-history.com/svg?repos=PulseBeat02/yt-media-storage&type=date&legend=top-left)](https://www.star-history.com/#PulseBeat02/yt-media-storage&type=date&legend=top-left)
-
 **Explanation Video**: https://youtu.be/l03Os5uwWmk?si=xgZPNMrvs_aDcWE5  
 **YC Hacker News**: https://news.ycombinator.com/item?id=47012964
 
