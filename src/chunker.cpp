@@ -1,5 +1,5 @@
 // This file is part of yt-media-storage, a tool for encoding media.
-// Copyright (C) Brandon Li <https://brandonli.me/>
+// Copyright (C) 2026 Brandon Li <https://brandonli.me/>
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -70,8 +70,8 @@ ChunkedStorageData chunkFile(const char *path, const std::size_t chunk_size) {
 
 FileChunkReader::FileChunkReader(const char *path, const std::size_t chunk_size)
     : path_(path)
-    , chunk_size_(chunk_size > 0 ? chunk_size : CHUNK_SIZE_BYTES)
-    , file_(path, std::ios::binary) {
+      , chunk_size_(chunk_size > 0 ? chunk_size : CHUNK_SIZE_BYTES)
+      , file_(path, std::ios::binary) {
     if (!file_) {
         throw std::runtime_error("open failed");
     }
