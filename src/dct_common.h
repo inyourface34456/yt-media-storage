@@ -36,7 +36,7 @@
 #define DCT_USE_NEON 1
 #endif
 
-// simd (used for dot products)
+// simd dot product
 inline float dot_product_64(const float *a, const float *b) {
 #if defined(DCT_USE_AVX)
     __m256 sum0 = _mm256_setzero_ps();
@@ -54,7 +54,6 @@ inline float dot_product_64(const float *a, const float *b) {
     return _mm_cvtss_f32(r);
 
 #elif defined(DCT_USE_SSE2)
-    // SSE2: 4 floats/register, unroll 4× → 16 floats/iteration
     __m128 sum0 = _mm_setzero_ps();
     __m128 sum1 = _mm_setzero_ps();
     __m128 sum2 = _mm_setzero_ps();
@@ -66,7 +65,6 @@ inline float dot_product_64(const float *a, const float *b) {
         sum3 = _mm_add_ps(sum3, _mm_mul_ps(_mm_loadu_ps(a + i + 12), _mm_loadu_ps(b + i + 12)));
     }
     sum0 = _mm_add_ps(_mm_add_ps(sum0, sum1), _mm_add_ps(sum2, sum3));
-    // Horizontal sum (SSE2-only, no hadd)
     __m128 shuf = _mm_shuffle_ps(sum0, sum0, _MM_SHUFFLE(2, 3, 0, 1));
     sum0 = _mm_add_ps(sum0, shuf);
     shuf = _mm_movehl_ps(shuf, sum0);
@@ -74,7 +72,6 @@ inline float dot_product_64(const float *a, const float *b) {
     return _mm_cvtss_f32(sum0);
 
 #elif defined(DCT_USE_NEON)
-    // ARM NEON: 4 floats/register, unroll 4×
     float32x4_t sum0 = vdupq_n_f32(0.0f);
     float32x4_t sum1 = vdupq_n_f32(0.0f);
     float32x4_t sum2 = vdupq_n_f32(0.0f);
