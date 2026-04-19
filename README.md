@@ -4,7 +4,7 @@
 
 # Media Storage
 
-**Explanation Video**: 
+**Explanation Videos**: 
 - https://youtu.be/l03Os5uwWmk?si=xgZPNMrvs_aDcWE5  
 - https://youtu.be/Qmds7-mwCMg?si=04TzoLp7p-LdRyLX
 
