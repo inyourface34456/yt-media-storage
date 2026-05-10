@@ -4,13 +4,15 @@
 
 # Media Storage
 
-**Explanation Videos**: 
-- https://youtu.be/l03Os5uwWmk?si=xgZPNMrvs_aDcWE5  
+**Explanation Videos**:
+
+- https://youtu.be/l03Os5uwWmk?si=xgZPNMrvs_aDcWE5
 - https://youtu.be/Qmds7-mwCMg?si=04TzoLp7p-LdRyLX
 
 **YC Hacker News**: https://news.ycombinator.com/item?id=47012964
 
-Stores files onto any video or streaming platform (YouTube, Twitch, etc.) by encoding them into lossless video and decoding 
+Stores files onto any video or streaming platform (YouTube, Twitch, etc.) by encoding them into lossless video and
+decoding
 them back to the original file. Supports both a command-line interface and a graphical user interface.
 
 ## Features
@@ -46,10 +48,13 @@ GUI. You may need to install some shared libraries (FFmpeg, Qt6, libsodium) to r
 
 ```bash
 sudo apt update
-sudo apt install cmake build-essential qt6-base-dev \
+sudo apt install cmake build-essential pkg-config qt6-base-dev \
   libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libswresample-dev \
   libsodium-dev libomp-dev ffmpeg
 ```
+
+> **WSL:** if CMake reports `Could NOT find PkgConfig` and the error has Strawberry, WSL is using Windows'
+`pkg-config.exe` from inherited `PATH`. Pass `-DPKG_CONFIG_EXECUTABLE=/usr/bin/pkg-config` to CMake.
 
 ### Fedora/CentOS
 
@@ -72,11 +77,21 @@ brew install cmake qt@6 ffmpeg libsodium libomp
 ### Windows (vcpkg)
 
 ```powershell
-vcpkg install ffmpeg libsodium openmp qt6 gtest
+vcpkg install ffmpeg libsodium qt6-base gtest --triplet x64-windows
+```
+
+Then configure with the toolchain file:
+
+```powershell
+cmake -B build -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake
 ```
 
 Or install Qt6 separately via the [Qt Online Installer](https://www.qt.io/download-qt-installer) and FFmpeg/libsodium
-via vcpkg.
+via vcpkg. When using the installer, point CMake at the install prefix:
+
+```powershell
+cmake -B build -DCMAKE_PREFIX_PATH="C:/Qt/XXX/msvcXXX_64"
+```
 
 ## Building
 
