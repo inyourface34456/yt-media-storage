@@ -77,6 +77,7 @@ jobs:
             libxcb-icccm4-dev libxcb-image0-dev libxcb-keysyms1-dev libxcb-randr0-dev \
             libxcb-render-util0-dev libxcb-shape0-dev libxcb-sync-dev libxcb-util-dev \
             libxcb-xfixes0-dev libxcb-xkb-dev libxcb-render0-dev libxcb-glx0-dev \
+            libxcb-xinput-dev \
             libgl1-mesa-dev libglu1-mesa-dev libfontconfig1-dev libfreetype6-dev \
             libdbus-1-dev libxext-dev libxfixes-dev libxi-dev libxrender-dev \
             libx11-xcb-dev libsm-dev libice-dev \
