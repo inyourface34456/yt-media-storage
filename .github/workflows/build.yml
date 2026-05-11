@@ -2,10 +2,10 @@ name: Build
 
 on:
   push:
-    branches: [master]
-    tags: ['v*']
+    branches: [ master ]
+    tags: [ 'v*' ]
   pull_request:
-    branches: [master]
+    branches: [ master ]
   workflow_dispatch:
 
 env:
@@ -50,7 +50,7 @@ jobs:
             build_gui: 'ON'
             qt_source: 'vcpkg'
           - name: macos-x64
-            os: macos-13
+            os: macos-15-intel
             triplet: x64-osx
             msvc_arch: ''
             build_gui: 'ON'
