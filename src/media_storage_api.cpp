@@ -92,29 +92,10 @@ ms_status_t ms_encode(const ms_encode_options_t *options, ms_result_t *result) {
 
         const int batch_size = std::max(1, omp_get_max_threads());
 
-        for (std::size_t batch_start = 0; batch_start < num_chunks;
-             batch_start += batch_size) {
-            const std::size_t batch_end =
-                std::min(batch_start + static_cast<std::size_t>(batch_size),
-                         num_chunks);
-            const int batch_count = static_cast<int>(batch_end - batch_start);
+        using BatchResults = std::vector<std::pair<std::vector<Packet>, ChunkManifestEntry>>;
 
-            if (options->progress) {
-                if (options->progress(static_cast<uint64_t>(batch_start),
-                                      static_cast<uint64_t>(num_chunks),
-                                      options->progress_user) != 0) {
-                    if (encrypt) secure_zero(std::span<std::byte>(key));
-                    return MS_ERR_ENCODE_FAILED;
-                }
-            }
-
-            std::vector<std::vector<std::byte>> chunk_datas(batch_count);
-            for (int j = 0; j < batch_count; ++j) {
-                chunk_datas[j] = reader.read_chunk(batch_start + j);
-            }
-
-            std::vector<std::pair<std::vector<Packet>, ChunkManifestEntry>>
-                results(batch_count);
+        auto fec_encode_batch = [&](const std::size_t batch_start, const int batch_count) -> BatchResults {
+            BatchResults results(batch_count);
             bool batch_error = false;
 
 #pragma omp parallel for schedule(dynamic)
@@ -122,7 +103,7 @@ ms_status_t ms_encode(const ms_encode_options_t *options, ms_result_t *result) {
                 if (batch_error) continue;
                 try {
                     const std::size_t i = batch_start + j;
-                    std::span<const std::byte> data_to_encode(chunk_datas[j]);
+                    std::span<const std::byte> data_to_encode = reader.chunk_view(i);
                     std::vector<std::byte> encrypted_buf;
                     if (encrypt) {
                         encrypted_buf = encrypt_chunk(
@@ -139,9 +120,40 @@ ms_status_t ms_encode(const ms_encode_options_t *options, ms_result_t *result) {
                 }
             }
 
-            if (batch_error) {
-                if (encrypt) secure_zero(std::span<std::byte>(key));
-                return MS_ERR_ENCODE_FAILED;
+            if (batch_error) throw std::runtime_error("batch FEC encoding failed");
+            return results;
+        };
+
+        const auto first_end = std::min(static_cast<std::size_t>(batch_size), num_chunks);
+        std::future<BatchResults> pending =
+            std::async(std::launch::async, fec_encode_batch,
+                       static_cast<std::size_t>(0), static_cast<int>(first_end));
+
+        for (std::size_t batch_start = 0; batch_start < num_chunks;
+             batch_start += batch_size) {
+            const std::size_t batch_end =
+                std::min(batch_start + static_cast<std::size_t>(batch_size),
+                         num_chunks);
+            const int batch_count = static_cast<int>(batch_end - batch_start);
+
+            if (options->progress) {
+                if (options->progress(static_cast<uint64_t>(batch_start),
+                                      static_cast<uint64_t>(num_chunks),
+                                      options->progress_user) != 0) {
+                    if (pending.valid()) pending.wait();
+                    if (encrypt) secure_zero(std::span<std::byte>(key));
+                    return MS_ERR_ENCODE_FAILED;
+                }
+            }
+
+            auto results = pending.get();
+
+            if (const std::size_t next_start = batch_start + batch_size; next_start < num_chunks) {
+                const auto next_end = std::min(
+                    next_start + static_cast<std::size_t>(batch_size), num_chunks);
+                const int next_count = static_cast<int>(next_end - next_start);
+                pending = std::async(std::launch::async,
+                                     fec_encode_batch, next_start, next_count);
             }
 
             for (int j = 0; j < batch_count; ++j) {
@@ -327,11 +339,6 @@ ms_status_t ms_stream_encode(const ms_stream_encode_options_t *options, ms_resul
         using BatchResults = std::vector<std::pair<std::vector<Packet>, ChunkManifestEntry>>;
 
         auto fec_encode_batch = [&](const std::size_t batch_start, const int batch_count) -> BatchResults {
-            std::vector<std::vector<std::byte>> chunk_datas(batch_count);
-            for (int j = 0; j < batch_count; ++j) {
-                chunk_datas[j] = reader.read_chunk(batch_start + j);
-            }
-
             BatchResults results(batch_count);
             bool batch_error = false;
 
@@ -340,7 +347,7 @@ ms_status_t ms_stream_encode(const ms_stream_encode_options_t *options, ms_resul
                 if (batch_error) continue;
                 try {
                     const std::size_t i = batch_start + j;
-                    std::span<const std::byte> data_to_encode(chunk_datas[j]);
+                    std::span<const std::byte> data_to_encode = reader.chunk_view(i);
                     std::vector<std::byte> encrypted_buf;
                     if (encrypt) {
                         encrypted_buf = encrypt_chunk(
@@ -487,7 +494,7 @@ ms_status_t ms_stream_decode(const ms_stream_decode_options_t *options, ms_resul
                 }
 
                 const std::span<const std::byte> data(pkt_data.data(), pkt_data.size());
-                if (auto res = decoder.process_packet(data, false);
+                if (const auto res = decoder.process_packet(data, false);
                     res && res->success) {
                     ++decoded_chunks;
                 }

@@ -34,7 +34,6 @@ StreamEncoder::~StreamEncoder() {
         try { finalize(); } catch (...) {
         }
     }
-    if (sws_ctx_) sws_freeContext(sws_ctx_);
     if (av_packet_) av_packet_free(&av_packet_);
     if (frame_) av_frame_free(&frame_);
     if (audio_frame_) av_frame_free(&audio_frame_);
@@ -230,16 +229,6 @@ void StreamEncoder::init_stream(const std::string &rtmp_url, const int bitrate_k
         throw std::runtime_error("Failed to allocate packet");
     }
 
-    gray_buffer_.resize(static_cast<std::size_t>(width_) * height_);
-    sws_ctx_ = sws_getContext(
-        width_, height_, AV_PIX_FMT_GRAY8,
-        width_, height_, AV_PIX_FMT_YUV420P,
-        SWS_POINT, nullptr, nullptr, nullptr
-    );
-    if (!sws_ctx_) {
-        throw std::runtime_error("Failed to create swscale context");
-    }
-
     layout_ = compute_frame_layout(width_, height_);
     frame_data_buffer_.reserve(layout_.bytes_per_frame);
 
@@ -264,13 +253,15 @@ int StreamEncoder::packets_per_frame() {
     return static_cast<int>(layout.bytes_per_frame / packet_size);
 }
 
-void StreamEncoder::embed_data_in_frame(const std::vector<std::byte> &data) {
+void StreamEncoder::embed_data_in_frame(const std::vector<std::byte> &data) const {
 #if defined(__APPLE__) && defined(_OPENMP)
     const auto &blocks = get_precomputed_blocks();
     const auto &patterns = blocks.patterns;
 #else
     const auto &patterns = get_precomputed_blocks().patterns;
 #endif
+
+    av_frame_make_writable(frame_);
 
     const std::size_t total_bits = data.size() * 8;
     const int total_blocks = layout_.blocks_per_row * layout_.blocks_per_col;
@@ -280,9 +271,17 @@ void StreamEncoder::embed_data_in_frame(const std::vector<std::byte> &data) {
     const auto *src = reinterpret_cast<const uint8_t *>(data.data());
     const int blocks_per_row = layout_.blocks_per_row;
 
-    uint8_t *dst_base = gray_buffer_.data();
-    const int dst_stride = width_;
-    std::memset(dst_base, 128, gray_buffer_.size());
+    uint8_t *y_base = frame_->data[0];
+    const int y_stride = frame_->linesize[0];
+    for (int y = 0; y < height_; ++y)
+        std::memset(y_base + y * y_stride, 128, width_);
+
+    const int chroma_h = height_ / 2;
+    const int chroma_w = width_ / 2;
+    for (int y = 0; y < chroma_h; ++y) {
+        std::memset(frame_->data[1] + y * frame_->linesize[1], 128, chroma_w);
+        std::memset(frame_->data[2] + y * frame_->linesize[2], 128, chroma_w);
+    }
 
 #pragma omp parallel for schedule(static)
     for (int block_idx = 0; block_idx < active_blocks; ++block_idx) {
@@ -307,15 +306,10 @@ void StreamEncoder::embed_data_in_frame(const std::vector<std::byte> &data) {
 
         const auto &block = patterns[pattern];
         for (int y = 0; y < 8; ++y) {
-            std::memcpy(dst_base + (base_y + y) * dst_stride + base_x,
+            std::memcpy(y_base + (base_y + y) * y_stride + base_x,
                         block[y], 8);
         }
     }
-
-    const uint8_t *src_data[1] = {gray_buffer_.data()};
-    const int src_linesize[1] = {width_};
-    sws_scale(sws_ctx_, src_data, src_linesize, 0, height_,
-              frame_->data, frame_->linesize);
 }
 
 void StreamEncoder::encode_frame() {

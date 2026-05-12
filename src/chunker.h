@@ -48,17 +48,32 @@ class FileChunkReader {
 public:
     explicit FileChunkReader(const char *path, std::size_t chunk_size = 0);
 
+    ~FileChunkReader();
+
+    FileChunkReader(const FileChunkReader &) = delete;
+
+    FileChunkReader &operator=(const FileChunkReader &) = delete;
+
+    FileChunkReader(FileChunkReader &&) = delete;
+
+    FileChunkReader &operator=(FileChunkReader &&) = delete;
+
     [[nodiscard]] std::size_t num_chunks() const { return num_chunks_; }
     [[nodiscard]] std::size_t file_size() const { return file_size_; }
     [[nodiscard]] std::size_t chunk_size() const { return chunk_size_; }
 
     [[nodiscard]] std::vector<std::byte> read_chunk(std::size_t index) const;
 
+    [[nodiscard]] std::span<const std::byte> chunk_view(std::size_t index) const;
+
 private:
     std::string path_;
     std::size_t file_size_;
     std::size_t chunk_size_;
     std::size_t num_chunks_;
+    const std::byte *mapped_ = nullptr;
+    void *mapping_handle_ = nullptr;
+    void *file_handle_ = nullptr;
     mutable std::ifstream file_;
     mutable std::size_t file_pos_ = 0;
 };

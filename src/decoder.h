@@ -23,7 +23,6 @@
 #include <cstdint>
 #include <optional>
 #include <string>
-#include <unordered_map>
 #include <span>
 #include <vector>
 
@@ -119,7 +118,7 @@ public:
 
     [[nodiscard]] size_t total_packets_received() const { return total_packets_; }
 
-    [[nodiscard]] size_t chunks_completed() const { return completed_chunks.size(); }
+    [[nodiscard]] size_t chunks_completed() const { return completed_count_; }
 
     [[nodiscard]] std::vector<uint32_t> completed_chunk_indices() const;
 
@@ -138,7 +137,8 @@ private:
     bool encrypted_ = false;
     std::array<std::byte, 32> decrypt_key_{};
     bool decrypt_key_set_ = false;
-    std::unordered_map<uint32_t, ChunkDecoder> active_decoders;
-    std::unordered_map<uint32_t, std::vector<std::byte> > completed_chunks;
+    std::vector<std::optional<ChunkDecoder> > active_decoders;
+    std::vector<std::optional<std::vector<std::byte> > > completed_chunks;
+    size_t completed_count_ = 0;
     size_t total_packets_ = 0;
 };

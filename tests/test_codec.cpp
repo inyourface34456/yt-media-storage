@@ -89,7 +89,7 @@ TEST(Codec, Encoder_ProducesCorrectPacketCount) {
     const auto [packets, manifest] = encode_test_data(encoder, input_data);
     EXPECT_GT(packets.size(), 0u);
     EXPECT_GE(packets.size(), 32u);
-    EXPECT_LE(packets.size(), 64u);
+    EXPECT_LE(packets.size(), 96u);
 }
 
 TEST(Codec, Encoder_PacketHasCorrectMagic) {

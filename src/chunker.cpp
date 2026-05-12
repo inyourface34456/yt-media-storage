@@ -18,8 +18,18 @@
 #include "configuration.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <fstream>
 #include <stdexcept>
+
+#if defined(_WIN32)
+#include <windows.h>
+#else
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
 
 ChunkedStorageData chunkByteData(std::span<const std::byte> data) {
     ChunkedStorageData result;
@@ -79,6 +89,66 @@ FileChunkReader::FileChunkReader(const char *path, const std::size_t chunk_size)
     file_size_ = file_.tellg();
     file_.seekg(0);
     num_chunks_ = file_size_ == 0 ? 1 : (file_size_ + chunk_size_ - 1) / chunk_size_;
+
+    if (file_size_ == 0) {
+        return;
+    }
+
+#if defined(_WIN32)
+    HANDLE h = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ, nullptr,
+                            OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h == INVALID_HANDLE_VALUE) return;
+    HANDLE mapping = CreateFileMappingA(h, nullptr, PAGE_READONLY, 0, 0, nullptr);
+    if (!mapping) {
+        CloseHandle(h);
+        return;
+    }
+    void *view = MapViewOfFile(mapping, FILE_MAP_READ, 0, 0, 0);
+    if (!view) {
+        CloseHandle(mapping);
+        CloseHandle(h);
+        return;
+    }
+    file_handle_ = h;
+    mapping_handle_ = mapping;
+    mapped_ = static_cast<const std::byte *>(view);
+#else
+    const int fd = ::open(path, O_RDONLY);
+    if (fd < 0) return;
+    const void *view = ::mmap(nullptr, file_size_, PROT_READ, MAP_SHARED, fd, 0);
+    if (view == MAP_FAILED) {
+        ::close(fd);
+        return;
+    }
+    file_handle_ = reinterpret_cast<void *>(static_cast<intptr_t>(fd));
+    mapped_ = static_cast<const std::byte *>(view);
+#endif
+}
+
+FileChunkReader::~FileChunkReader() {
+#if defined(_WIN32)
+    if (mapped_) UnmapViewOfFile(const_cast<std::byte *>(mapped_));
+    if (mapping_handle_) CloseHandle(mapping_handle_);
+    if (file_handle_) CloseHandle(file_handle_);
+#else
+    if (mapped_ && file_size_ > 0) ::munmap(const_cast<std::byte *>(mapped_), file_size_);
+    if (file_handle_) ::close(static_cast<int>(reinterpret_cast<intptr_t>(file_handle_)));
+#endif
+}
+
+std::span<const std::byte> FileChunkReader::chunk_view(const std::size_t index) const {
+    if (index >= num_chunks_) {
+        throw std::runtime_error("chunk index out of range");
+    }
+    if (!mapped_) {
+        throw std::runtime_error("chunk_view called without active mapping");
+    }
+    const std::size_t offset = index * chunk_size_;
+    if (offset >= file_size_) {
+        return {};
+    }
+    const std::size_t len = (std::min)(chunk_size_, file_size_ - offset);
+    return {mapped_ + offset, len};
 }
 
 std::vector<std::byte> FileChunkReader::read_chunk(const std::size_t index) const {
@@ -91,6 +161,10 @@ std::vector<std::byte> FileChunkReader::read_chunk(const std::size_t index) cons
         return {};
     }
     const std::size_t len = (std::min)(chunk_size_, file_size_ - offset);
+
+    if (mapped_) {
+        return {mapped_ + offset, mapped_ + offset + len};
+    }
 
     if (offset != file_pos_) {
         file_.seekg(static_cast<std::streamoff>(offset));
