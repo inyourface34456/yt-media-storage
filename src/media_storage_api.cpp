@@ -327,12 +327,13 @@ ms_status_t ms_stream_encode(const ms_stream_encode_options_t *options, ms_resul
 
     std::size_t total_packets = 0;
     int64_t total_frames = 0;
-    const int bitrate = options->bitrate_kbps > 0 ? options->bitrate_kbps : 35000;
-    const int width = options->width > 0 ? options->width : FRAME_WIDTH;
-    const int height = options->height > 0 ? options->height : FRAME_HEIGHT;
+    const int bitrate = options->bitrate_kbps > 0 ? options->bitrate_kbps : FRAME_BITRATE;
+    const int width = options->width > 0 ? options->width : FRAME_WIDTH_STREAM;
+    const int height = options->height > 0 ? options->height : FRAME_HEIGHT_STREAM;
+    const int fps = options->fps > 0 ? options->fps : FRAME_FPS;
 
     try {
-        StreamEncoder stream_encoder(stream_url, bitrate, width, height);
+        StreamEncoder stream_encoder(stream_url, bitrate, width, height, fps);
 
         const int batch_size = std::max(1, omp_get_max_threads());
 

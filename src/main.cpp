@@ -140,10 +140,10 @@ static int do_decode(const std::string &input_path, const std::string &output_pa
 static int do_stream_encode(const std::string &input_path, const std::string &stream_url,
                             const bool encrypt, const std::string &password,
                             const ms_hash_algorithm_t hash_algo, const int bitrate_kbps,
-                            const int width, const int height) {
+                            const int width, const int height, const int fps) {
     std::cout << "Input: " << input_path << "\n";
     std::cout << "Stream URL: " << stream_url << "\n";
-    std::cout << "Resolution: " << width << "x" << height << "\n";
+    std::cout << "Resolution: " << width << "x" << height << "(" << fps << " fps)\n";
     std::cout << "Bitrate: " << bitrate_kbps << " kbps\n";
 
     ms_stream_encode_options_t opts{};
@@ -156,6 +156,7 @@ static int do_stream_encode(const std::string &input_path, const std::string &st
     opts.bitrate_kbps = bitrate_kbps;
     opts.width = width;
     opts.height = height;
+    opts.fps = fps;
     opts.progress = stream_encode_progress;
     opts.progress_user = nullptr;
 
@@ -226,9 +227,10 @@ int main(const int argc, char *argv[]) {
     bool encrypt = false;
     std::string password;
     auto hash_algo = MS_HASH_CRC32;
-    int bitrate_kbps = 35000;
-    int stream_width = 1920;
-    int stream_height = 1080;
+    int bitrate_kbps = FRAME_BITRATE;
+    int stream_width = FRAME_WIDTH_STREAM;
+    int stream_height = FRAME_HEIGHT_STREAM;
+    int stream_fps = FRAME_FPS;
 
     for (int i = 2; i < argc; ++i) {
         if (const std::string arg = argv[i]; (arg == "--input" || arg == "-i") && i + 1 < argc) {
@@ -243,6 +245,8 @@ int main(const int argc, char *argv[]) {
             stream_width = std::stoi(argv[++i]);
         } else if (arg == "--height" && i + 1 < argc) {
             stream_height = std::stoi(argv[++i]);
+        } else if (arg == "--fps" && i + 1 < argc) {
+            stream_fps = std::stoi(argv[++i]);
         } else if ((arg == "--encrypt" || arg == "-e")) {
             encrypt = true;
         } else if ((arg == "--password" || arg == "-p") && i + 1 < argc) {
@@ -292,7 +296,7 @@ int main(const int argc, char *argv[]) {
             return 1;
         }
         return do_stream_encode(input_path, stream_url, encrypt, password, hash_algo, bitrate_kbps,
-                                stream_width, stream_height);
+                                stream_width, stream_height, stream_fps);
     } else {
         if (stream_url.empty() || output_path.empty()) {
             std::cerr << "Error: --url and --output must be specified for stream-decode\n";

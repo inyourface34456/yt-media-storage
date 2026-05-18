@@ -24,8 +24,8 @@
 #include <stdexcept>
 
 StreamEncoder::StreamEncoder(const std::string &rtmp_url, const int bitrate_kbps,
-                             const int width, const int height)
-    : width_(width), height_(height) {
+                             const int width, const int height, const int fps)
+    : width_(width), height_(height), fps_(fps) {
     init_stream(rtmp_url, bitrate_kbps);
 }
 
@@ -176,8 +176,8 @@ void StreamEncoder::init_stream(const std::string &rtmp_url, const int bitrate_k
 
     video_codec_ctx_->width = width_;
     video_codec_ctx_->height = height_;
-    video_codec_ctx_->time_base = {1, FRAME_FPS};
-    video_codec_ctx_->framerate = {FRAME_FPS, 1};
+    video_codec_ctx_->time_base = {1, fps_};
+    video_codec_ctx_->framerate = {fps_, 1};
     video_codec_ctx_->gop_size = 30;
     video_codec_ctx_->max_b_frames = 0;
     video_codec_ctx_->pix_fmt = AV_PIX_FMT_YUV420P;

@@ -26,6 +26,9 @@
 constexpr int FRAME_WIDTH = 3840;
 constexpr int FRAME_HEIGHT = 2160;
 constexpr int FRAME_FPS = 30;
+constexpr int FRAME_BITRATE = 35000;
+constexpr int FRAME_WIDTH_STREAM = FRAME_WIDTH / 2;
+constexpr int FRAME_HEIGHT_STREAM = FRAME_HEIGHT / 2;
 constexpr size_t CHUNK_SIZE_BYTES = 1024ull * 1024ull; // 1 MiB
 constexpr size_t SYMBOL_SIZE_BYTES = 256;
 constexpr double REPAIR_OVERHEAD = 5.00;

@@ -105,6 +105,7 @@ typedef struct {
     int bitrate_kbps;
     int width;
     int height;
+    int fps;
 
     ms_progress_fn progress;
     void *progress_user;

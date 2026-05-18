@@ -162,6 +162,7 @@ Stream-decode supports a 30-second retry window, so you can start it before the 
 | `--bitrate`  | `-b`  | Stream bitrate in kbps (default: 8000 for 1080p)                |
 | `--width`    |       | Stream video width (default: 1920)                              |
 | `--height`   |       | Stream video height (default: 1080)                             |
+| `--fps`      |       | Stream video frames-per-second (default: 30)                    |
 | `--encrypt`  | `-e`  | Enable encryption (encode only)                                 |
 | `--password` | `-p`  | Password for encryption/decryption                              |
 | `--hash`     | `-H`  | Checksum algorithm: `crc32` (default) or `xxhash` (encode only) |
