@@ -264,7 +264,7 @@ target_link_libraries(your_app PRIVATE media_storage_lib)
 - **Encoding**: Files are chunked, encoded with fountain codes, and embedded into video frames
 - **Decoding**: Packets are extracted from video frames and reconstructed into the original file
   - The extracted packets in each frame are checked against a magic value; frames which do not match are *skipped*
-- **Lossless Format**: FFV1 codec in MKV container at 3840x2160 (unless otherwise specified), 30 FPS
+- **Lossless Format**: FFV1 codec in MKV container at 3840x2160, 30 FPS
 - **Streaming Format**: H.264 (libx264) in FLV container via RTMP, with configurable resolution and bitrate
 - **Encryption**: Optional XChaCha20-Poly1305 via libsodium
 - **Checksums**: CRC32-MPEG2 (default) or xxHash32 per packet; algorithm is stored in the packet flags for
