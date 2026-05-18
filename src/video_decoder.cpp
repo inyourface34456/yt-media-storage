@@ -337,7 +337,21 @@ std::vector<std::vector<std::byte> > VideoDecoder::decode_next_frame() {
         return {};
     }
 
-    while (av_read_frame(format_ctx_, av_packet_) >= 0) {
+    while (true) {
+        const int read_ret = av_read_frame(format_ctx_, av_packet_);
+        if (read_ret < 0) {
+            eof_ = true;
+            if (auto flushed = flush_decoder_and_collect_packets(); !flushed.empty()) {
+                return flushed;
+            }
+            if (!extract_buffer_.empty()) {
+                std::vector<std::vector<std::byte> > packets;
+                extract_packets_from_buffer(extract_buffer_, packets);
+                return packets;
+            }
+            return {};
+        }
+
         if (av_packet_->stream_index != video_stream_index_) {
             av_packet_unref(av_packet_);
             continue;
@@ -361,20 +375,10 @@ std::vector<std::vector<std::byte> > VideoDecoder::decode_next_frame() {
             throw std::runtime_error("Error receiving frame");
         }
 
-        prepare_frame_for_extraction();
-        return accumulate_frame_and_extract_packets();
+        break;
     }
-
-    eof_ = true;
-    if (auto flushed = flush_decoder_and_collect_packets(); !flushed.empty()) {
-        return flushed;
-    }
-    if (!extract_buffer_.empty()) {
-        std::vector<std::vector<std::byte> > packets;
-        extract_packets_from_buffer(extract_buffer_, packets);
-        return packets;
-    }
-    return {};
+    prepare_frame_for_extraction();
+    return accumulate_frame_and_extract_packets();
 }
 
 std::vector<std::vector<std::byte> > VideoDecoder::decode_all_frames() {
