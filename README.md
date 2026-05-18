@@ -146,7 +146,9 @@ Stream-decode supports a 30-second retry window, so you can start it before the 
 ```bash
 # Terminal 1: start decoder first (waits for stream)
 ./media_storage stream-decode --url stream_playback_url --output decoded.bin
+```
 
+```bash
 # Terminal 2: start encoder
 # You must use yt-dlp to get the raw Twitch or YouTube Stream URL
 ./media_storage stream-encode --input myfile.bin --url rtmp://... --width 1920 --height 1080 --bitrate 8000
@@ -261,7 +263,8 @@ target_link_libraries(your_app PRIVATE media_storage_lib)
 
 - **Encoding**: Files are chunked, encoded with fountain codes, and embedded into video frames
 - **Decoding**: Packets are extracted from video frames and reconstructed into the original file
-- **Lossless Format**: FFV1 codec in MKV container at 3840x2160 (4K), 30 FPS
+  - The extracted packets in each frame are checked against a magic value; frames which do not match are *skipped*
+- **Lossless Format**: FFV1 codec in MKV container at 3840x2160, 30 FPS
 - **Streaming Format**: H.264 (libx264) in FLV container via RTMP, with configurable resolution and bitrate
 - **Encryption**: Optional XChaCha20-Poly1305 via libsodium
 - **Checksums**: CRC32-MPEG2 (default) or xxHash32 per packet; algorithm is stored in the packet flags for
