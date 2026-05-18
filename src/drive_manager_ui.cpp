@@ -33,10 +33,11 @@
 WorkerThread::WorkerThread(const Operation op, const QString &input, const QString &output,
                            const bool encrypt, const QString &password,
                            const QString &streamUrl, const int bitrate,
-                           const int streamWidth, const int streamHeight, QObject *parent)
+                           const int streamWidth, const int streamHeight,
+                           const int streamFps, QObject *parent)
     : QThread(parent), operation(op), inputPath(input), outputPath(output),
       encrypt(encrypt), password(password), streamUrl(streamUrl), bitrate(bitrate),
-      streamWidth(streamWidth), streamHeight(streamHeight) {
+      streamWidth(streamWidth), streamHeight(streamHeight), streamFps(streamFps) {
 }
 
 static int gui_encode_progress(const uint64_t current, const uint64_t total, void *user) {
@@ -141,7 +142,7 @@ void WorkerThread::run() {
         const std::string url = streamUrl.toStdString();
         emit statusUpdated("Starting stream encode...");
         emit logMessage("Stream encode: " + inputPath + " -> " + streamUrl);
-        emit logMessage(QString("Resolution: %1x%2").arg(streamWidth).arg(streamHeight));
+        emit logMessage(QString("Resolution: %1x%2 (%3 fps)").arg(streamWidth).arg(streamHeight).arg(streamFps));
         emit logMessage(QString("Bitrate: %1 kbps").arg(bitrate));
         if (encrypt) {
             emit logMessage("Encrypting chunks with password");
@@ -158,6 +159,7 @@ void WorkerThread::run() {
         opts.bitrate_kbps = bitrate;
         opts.width = streamWidth;
         opts.height = streamHeight;
+        opts.fps = streamFps;
         opts.progress = gui_stream_encode_progress;
         opts.progress_user = this;
 
