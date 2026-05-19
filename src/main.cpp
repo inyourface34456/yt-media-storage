@@ -19,6 +19,7 @@
 #include <sstream>
 #include <string>
 
+#include "configuration.h"
 #include "media_storage.h"
 
 static std::string format_size(const uint64_t bytes) {
