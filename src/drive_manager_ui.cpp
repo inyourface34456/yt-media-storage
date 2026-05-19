@@ -33,10 +33,11 @@
 WorkerThread::WorkerThread(const Operation op, const QString &input, const QString &output,
                            const bool encrypt, const QString &password,
                            const QString &streamUrl, const int bitrate,
-                           const int streamWidth, const int streamHeight, QObject *parent)
+                           const int streamWidth, const int streamHeight,
+                           const int streamFps, QObject *parent)
     : QThread(parent), operation(op), inputPath(input), outputPath(output),
       encrypt(encrypt), password(password), streamUrl(streamUrl), bitrate(bitrate),
-      streamWidth(streamWidth), streamHeight(streamHeight) {
+      streamWidth(streamWidth), streamHeight(streamHeight), streamFps(streamFps) {
 }
 
 static int gui_encode_progress(const uint64_t current, const uint64_t total, void *user) {
@@ -141,7 +142,7 @@ void WorkerThread::run() {
         const std::string url = streamUrl.toStdString();
         emit statusUpdated("Starting stream encode...");
         emit logMessage("Stream encode: " + inputPath + " -> " + streamUrl);
-        emit logMessage(QString("Resolution: %1x%2").arg(streamWidth).arg(streamHeight));
+        emit logMessage(QString("Resolution: %1x%2 (%3 fps)").arg(streamWidth).arg(streamHeight).arg(streamFps));
         emit logMessage(QString("Bitrate: %1 kbps").arg(bitrate));
         if (encrypt) {
             emit logMessage("Encrypting chunks with password");
@@ -158,6 +159,7 @@ void WorkerThread::run() {
         opts.bitrate_kbps = bitrate;
         opts.width = streamWidth;
         opts.height = streamHeight;
+        opts.fps = streamFps;
         opts.progress = gui_stream_encode_progress;
         opts.progress_user = this;
 
@@ -349,13 +351,21 @@ void DriveManagerUI::setupUI() {
     bitrateSpinBox->setSuffix(" kbps");
     streamLayout->addWidget(bitrateSpinBox, 4, 1, 1, 2);
 
+    streamLayout->addWidget(new QLabel("FPS:"), 5, 0);
+    fpsSpinBox = new QSpinBox();
+    fpsSpinBox->setRange(1, 240);
+    fpsSpinBox->setValue(FRAME_FPS);
+    fpsSpinBox->setSingleStep(1);
+    fpsSpinBox->setSuffix(" fps");
+    streamLayout->addWidget(fpsSpinBox, 5, 1, 1, 2);
+
     streamEncodeButton = new QPushButton("Stream Encode");
     streamEncodeButton->setIcon(QIcon::fromTheme("network-transmit"));
-    streamLayout->addWidget(streamEncodeButton, 5, 0, 1, 3);
+    streamLayout->addWidget(streamEncodeButton, 6, 0, 1, 3);
 
     streamDecodeButton = new QPushButton("Stream Decode");
     streamDecodeButton->setIcon(QIcon::fromTheme("network-receive"));
-    streamLayout->addWidget(streamDecodeButton, 6, 0, 1, 3);
+    streamLayout->addWidget(streamDecodeButton, 7, 0, 1, 3);
 
     leftLayout->addWidget(streamGroup);
 
@@ -531,7 +541,7 @@ void DriveManagerUI::startEncode() {
     workerThread = std::make_unique<WorkerThread>(WorkerThread::Encode,
                                                   inputFileEdit->text(), outputFileEdit->text(), encrypt,
                                                   passwordEdit->text(), QString(), 35000,
-                                                  0, 0, this);
+                                                  0, 0, 0, this);
 
     connect(workerThread.get(), &WorkerThread::progressUpdated,
             this, &DriveManagerUI::onProgressUpdated);
@@ -563,7 +573,7 @@ void DriveManagerUI::startDecode() {
     workerThread = std::make_unique<WorkerThread>(WorkerThread::Decode,
                                                   inputFileEdit->text(), outputFileEdit->text(), false,
                                                   passwordEdit->text(), QString(), 35000,
-                                                  0, 0, this);
+                                                  0, 0, 0, this);
 
     connect(workerThread.get(), &WorkerThread::progressUpdated,
             this, &DriveManagerUI::onProgressUpdated);
@@ -663,7 +673,8 @@ void DriveManagerUI::startStreamEncode() {
                                                   inputFileEdit->text(), QString(), encrypt,
                                                   passwordEdit->text(), fullUrl,
                                                   bitrateSpinBox->value(),
-                                                  res.width(), res.height(), this);
+                                                  res.width(), res.height(),
+                                                  fpsSpinBox->value(), this);
 
     connect(workerThread.get(), &WorkerThread::progressUpdated,
             this, &DriveManagerUI::onProgressUpdated);
@@ -708,7 +719,7 @@ void DriveManagerUI::startStreamDecode() {
     workerThread = std::make_unique<WorkerThread>(WorkerThread::StreamDecode,
                                                   QString(), outputFileEdit->text(), false,
                                                   passwordEdit->text(), decodeUrl,
-                                                  0, 0, 0, this);
+                                                  0, 0, 0, 0, this);
 
     connect(workerThread.get(), &WorkerThread::progressUpdated,
             this, &DriveManagerUI::onProgressUpdated);

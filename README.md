@@ -4,13 +4,15 @@
 
 # Media Storage
 
-**Explanation Videos**: 
-- https://youtu.be/l03Os5uwWmk?si=xgZPNMrvs_aDcWE5  
+**Explanation Videos**:
+
+- https://youtu.be/l03Os5uwWmk?si=xgZPNMrvs_aDcWE5
 - https://youtu.be/Qmds7-mwCMg?si=04TzoLp7p-LdRyLX
 
 **YC Hacker News**: https://news.ycombinator.com/item?id=47012964
 
-Stores files onto any video or streaming platform (YouTube, Twitch, etc.) by encoding them into lossless video and decoding 
+Stores files onto any video or streaming platform (YouTube, Twitch, etc.) by encoding them into lossless video and
+decoding
 them back to the original file. Supports both a command-line interface and a graphical user interface.
 
 ## Features
@@ -27,9 +29,8 @@ them back to the original file. Supports both a command-line interface and a gra
 
 ## CI/CD Pipeline
 
-Visit my [CI/CD pipeline](https://ci.brandonli.me), and click "Login as Guest". Visit the yt-media-storage project,
-click on the latest passing build, and click "Artifacts" to download the latest build artifacts for both the CLI and
-GUI. You may need to install some shared libraries (FFmpeg, Qt6, libsodium) to run the executables.
+Visit [GitHub Releases](https://github.com/PulseBeat02/yt-media-storage/releases), and click to download
+artifacts.
 
 ## Requirements
 
@@ -46,10 +47,13 @@ GUI. You may need to install some shared libraries (FFmpeg, Qt6, libsodium) to r
 
 ```bash
 sudo apt update
-sudo apt install cmake build-essential qt6-base-dev \
+sudo apt install cmake build-essential pkg-config qt6-base-dev \
   libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libswresample-dev \
   libsodium-dev libomp-dev ffmpeg
 ```
+
+> **WSL:** if CMake reports `Could NOT find PkgConfig` and the error has Strawberry, WSL is using Windows'
+`pkg-config.exe` from inherited `PATH`. Pass `-DPKG_CONFIG_EXECUTABLE=/usr/bin/pkg-config` to CMake.
 
 ### Fedora/CentOS
 
@@ -72,11 +76,21 @@ brew install cmake qt@6 ffmpeg libsodium libomp
 ### Windows (vcpkg)
 
 ```powershell
-vcpkg install ffmpeg libsodium openmp qt6 gtest
+vcpkg install ffmpeg libsodium qt6-base gtest --triplet x64-windows
+```
+
+Then configure with the toolchain file:
+
+```powershell
+cmake -B build -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake
 ```
 
 Or install Qt6 separately via the [Qt Online Installer](https://www.qt.io/download-qt-installer) and FFmpeg/libsodium
-via vcpkg.
+via vcpkg. When using the installer, point CMake at the install prefix:
+
+```powershell
+cmake -B build -DCMAKE_PREFIX_PATH="C:/Qt/XXX/msvcXXX_64"
+```
 
 ## Building
 
@@ -132,7 +146,9 @@ Stream-decode supports a 30-second retry window, so you can start it before the 
 ```bash
 # Terminal 1: start decoder first (waits for stream)
 ./media_storage stream-decode --url stream_playback_url --output decoded.bin
+```
 
+```bash
 # Terminal 2: start encoder
 # You must use yt-dlp to get the raw Twitch or YouTube Stream URL
 ./media_storage stream-encode --input myfile.bin --url rtmp://... --width 1920 --height 1080 --bitrate 8000
@@ -148,6 +164,7 @@ Stream-decode supports a 30-second retry window, so you can start it before the 
 | `--bitrate`  | `-b`  | Stream bitrate in kbps (default: 8000 for 1080p)                |
 | `--width`    |       | Stream video width (default: 1920)                              |
 | `--height`   |       | Stream video height (default: 1080)                             |
+| `--fps`      |       | Stream video frames-per-second (default: 30)                    |
 | `--encrypt`  | `-e`  | Enable encryption (encode only)                                 |
 | `--password` | `-p`  | Password for encryption/decryption                              |
 | `--hash`     | `-H`  | Checksum algorithm: `crc32` (default) or `xxhash` (encode only) |
@@ -247,7 +264,8 @@ target_link_libraries(your_app PRIVATE media_storage_lib)
 
 - **Encoding**: Files are chunked, encoded with fountain codes, and embedded into video frames
 - **Decoding**: Packets are extracted from video frames and reconstructed into the original file
-- **Lossless Format**: FFV1 codec in MKV container at 3840x2160 (4K), 30 FPS
+  - The extracted packets in each frame are checked against a magic value; frames which do not match are *skipped*
+- **Lossless Format**: FFV1 codec in MKV container at 3840x2160, 30 FPS
 - **Streaming Format**: H.264 (libx264) in FLV container via RTMP, with configurable resolution and bitrate
 - **Encryption**: Optional XChaCha20-Poly1305 via libsodium
 - **Checksums**: CRC32-MPEG2 (default) or xxHash32 per packet; algorithm is stored in the packet flags for

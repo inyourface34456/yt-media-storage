@@ -138,13 +138,6 @@ int64_t VideoDecoder::total_frames() const {
 }
 
 void VideoDecoder::extract_data_into(std::vector<std::byte> &dest) const {
-#if defined(__APPLE__) && defined(_OPENMP)
-    const auto &projections = get_decoder_projections();
-    const auto &vectors = projections.vectors;
-#else
-    const auto &vectors = get_decoder_projections().vectors;
-#endif
-
     const int blocks_per_row = layout_.blocks_per_row;
     const int total_blocks = layout_.total_blocks;
     constexpr int blocks_per_byte = 8 / BITS_PER_BLOCK;
@@ -165,31 +158,78 @@ void VideoDecoder::extract_data_into(std::vector<std::byte> &dest) const {
     auto *out = reinterpret_cast<uint8_t *>(dest.data() + base);
     std::memset(out, 0, total_bytes);
 
+    if constexpr (BITS_PER_BLOCK == 1) {
 #pragma omp parallel for schedule(static)
-    for (int byte_idx = 0; byte_idx < total_bytes; ++byte_idx) {
-        uint8_t current_byte = 0;
+        for (int byte_idx = 0; byte_idx < total_bytes; ++byte_idx) {
+            uint8_t current_byte = 0;
+            for (int sub = 0; sub < 8; ++sub) {
+                constexpr int32_t C0 = 8035; // round(cos(1*pi/16) * 8192)
+                constexpr int32_t C1 = 6811; // round(cos(3*pi/16) * 8192)
+                constexpr int32_t C2 = 4551; // round(cos(5*pi/16) * 8192)
+                constexpr int32_t C3 = 1598; // round(cos(7*pi/16) * 8192)
 
-        for (int sub = 0; sub < blocks_per_byte; ++sub) {
-            const int block_idx = byte_idx * blocks_per_byte + sub;
-            const int block_row = block_idx / blocks_per_row;
-            const int block_col = block_idx % blocks_per_row;
-            const int base_x = block_col * 8;
-            const int base_y = block_row * 8;
+                const int block_idx = byte_idx * 8 + sub;
+                const int block_row = block_idx / blocks_per_row;
+                const int block_col = block_idx % blocks_per_row;
+                const int base_x = block_col * 8;
+                const int base_y = block_row * 8;
 
-            alignas(32) float block_flat[64];
-            for (int y = 0; y < 8; ++y) {
-                const uint8_t *row = src_base + (base_y + y) * src_stride + base_x;
-                for (int x = 0; x < 8; ++x)
-                    block_flat[y * 8 + x] = static_cast<float>(row[x]);
+                int col[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+                for (int y = 0; y < 8; ++y) {
+                    const uint8_t *row = src_base + (base_y + y) * src_stride + base_x;
+                    col[0] += row[0];
+                    col[1] += row[1];
+                    col[2] += row[2];
+                    col[3] += row[3];
+                    col[4] += row[4];
+                    col[5] += row[5];
+                    col[6] += row[6];
+                    col[7] += row[7];
+                }
+
+                const int32_t s =
+                        C0 * (col[0] - col[7]) +
+                        C1 * (col[1] - col[6]) +
+                        C2 * (col[2] - col[5]) +
+                        C3 * (col[3] - col[4]);
+                current_byte = static_cast<uint8_t>((current_byte << 1) | (s > 0 ? 1 : 0));
             }
-
-            for (int b = 0; b < BITS_PER_BLOCK; ++b) {
-                const float sum = dot_product_64(block_flat, vectors[b]);
-                current_byte = (current_byte << 1) | (sum > 0.0f ? 1 : 0);
-            }
+            out[byte_idx] = current_byte;
         }
+    } else {
+#if defined(__APPLE__) && defined(_OPENMP)
+        const auto &projections = get_decoder_projections();
+        const auto &vectors = projections.vectors;
+#else
+        const auto &vectors = get_decoder_projections().vectors;
+#endif
 
-        out[byte_idx] = current_byte;
+#pragma omp parallel for schedule(static)
+        for (int byte_idx = 0; byte_idx < total_bytes; ++byte_idx) {
+            uint8_t current_byte = 0;
+
+            for (int sub = 0; sub < blocks_per_byte; ++sub) {
+                const int block_idx = byte_idx * blocks_per_byte + sub;
+                const int block_row = block_idx / blocks_per_row;
+                const int block_col = block_idx % blocks_per_row;
+                const int base_x = block_col * 8;
+                const int base_y = block_row * 8;
+
+                alignas(32) float block_flat[64];
+                for (int y = 0; y < 8; ++y) {
+                    const uint8_t *row = src_base + (base_y + y) * src_stride + base_x;
+                    for (int x = 0; x < 8; ++x)
+                        block_flat[y * 8 + x] = static_cast<float>(row[x]);
+                }
+
+                for (int b = 0; b < BITS_PER_BLOCK; ++b) {
+                    const float sum = dot_product_64(block_flat, vectors[b]);
+                    current_byte = (current_byte << 1) | (sum > 0.0f ? 1 : 0);
+                }
+            }
+
+            out[byte_idx] = current_byte;
+        }
     }
 }
 
@@ -297,7 +337,21 @@ std::vector<std::vector<std::byte> > VideoDecoder::decode_next_frame() {
         return {};
     }
 
-    while (av_read_frame(format_ctx_, av_packet_) >= 0) {
+    while (true) {
+        const int read_ret = av_read_frame(format_ctx_, av_packet_);
+        if (read_ret < 0) {
+            eof_ = true;
+            if (auto flushed = flush_decoder_and_collect_packets(); !flushed.empty()) {
+                return flushed;
+            }
+            if (!extract_buffer_.empty()) {
+                std::vector<std::vector<std::byte> > packets;
+                extract_packets_from_buffer(extract_buffer_, packets);
+                return packets;
+            }
+            return {};
+        }
+
         if (av_packet_->stream_index != video_stream_index_) {
             av_packet_unref(av_packet_);
             continue;
@@ -321,20 +375,10 @@ std::vector<std::vector<std::byte> > VideoDecoder::decode_next_frame() {
             throw std::runtime_error("Error receiving frame");
         }
 
-        prepare_frame_for_extraction();
-        return accumulate_frame_and_extract_packets();
+        break;
     }
-
-    eof_ = true;
-    if (auto flushed = flush_decoder_and_collect_packets(); !flushed.empty()) {
-        return flushed;
-    }
-    if (!extract_buffer_.empty()) {
-        std::vector<std::vector<std::byte> > packets;
-        extract_packets_from_buffer(extract_buffer_, packets);
-        return packets;
-    }
-    return {};
+    prepare_frame_for_extraction();
+    return accumulate_frame_and_extract_packets();
 }
 
 std::vector<std::vector<std::byte> > VideoDecoder::decode_all_frames() {

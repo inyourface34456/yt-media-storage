@@ -38,6 +38,8 @@
 
 #include <memory>
 
+#include "configuration.h"
+
 class WorkerThread : public QThread {
     Q_OBJECT
 
@@ -51,9 +53,9 @@ public:
 
     WorkerThread(Operation op, const QString &input, const QString &output,
                  bool encrypt = false, const QString &password = QString(),
-                 const QString &streamUrl = QString(), int bitrate = 35000,
-                 int streamWidth = 1920, int streamHeight = 1080,
-                 QObject *parent = nullptr);
+                 const QString &streamUrl = QString(), int bitrate = FRAME_BITRATE,
+                 int streamWidth = FRAME_WIDTH_STREAM, int streamHeight = FRAME_HEIGHT_STREAM,
+                 int streamFps = FRAME_FPS, QObject *parent = nullptr);
 
 signals:
     void progressUpdated(int percentage);
@@ -77,6 +79,7 @@ private:
     int bitrate;
     int streamWidth;
     int streamHeight;
+    int streamFps;
 };
 
 class DriveManagerUI : public QMainWindow {
@@ -180,6 +183,7 @@ private:
     QLineEdit *streamUrlEdit;
     QLineEdit *streamKeyEdit;
     QSpinBox *bitrateSpinBox;
+    QSpinBox *fpsSpinBox;
     QComboBox *resolutionCombo;
     QPushButton *streamEncodeButton;
     QPushButton *streamDecodeButton;

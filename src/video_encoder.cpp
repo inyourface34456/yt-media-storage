@@ -52,7 +52,6 @@ VideoEncoder::~VideoEncoder() {
         try { finalize(); } catch (...) {
         }
     }
-    if (sws_ctx) sws_freeContext(sws_ctx);
     if (av_packet) av_packet_free(&av_packet);
     if (frame) av_frame_free(&frame);
     if (codec_ctx) avcodec_free_context(&codec_ctx);
@@ -130,18 +129,6 @@ void VideoEncoder::init_encoder(const std::string &output_path) {
         throw std::runtime_error("Failed to allocate packet");
     }
 
-    if (codec_ctx->pix_fmt != AV_PIX_FMT_GRAY8) {
-        gray_buffer.resize(static_cast<std::size_t>(FRAME_WIDTH) * FRAME_HEIGHT);
-        sws_ctx = sws_getContext(
-            FRAME_WIDTH, FRAME_HEIGHT, AV_PIX_FMT_GRAY8,
-            FRAME_WIDTH, FRAME_HEIGHT, codec_ctx->pix_fmt,
-            SWS_POINT, nullptr, nullptr, nullptr
-        );
-        if (!sws_ctx) {
-            throw std::runtime_error("Failed to create swscale context");
-        }
-    }
-
     layout_ = compute_frame_layout();
     frame_data_buffer.reserve(layout_.bytes_per_frame);
 
@@ -162,13 +149,15 @@ int VideoEncoder::packets_per_frame() {
     return static_cast<int>(layout.bytes_per_frame / packet_size);
 }
 
-void VideoEncoder::embed_data_in_frame(const std::vector<std::byte> &data) {
+void VideoEncoder::embed_data_in_frame(const std::vector<std::byte> &data) const {
 #if defined(__APPLE__) && defined(_OPENMP)
     const auto &blocks = get_precomputed_blocks(); // avoid structured bindings on Apple OpenMP
     const auto &patterns = blocks.patterns;
 #else
     const auto &patterns = get_precomputed_blocks().patterns;
 #endif
+
+    av_frame_make_writable(frame);
 
     const std::size_t total_bits = data.size() * 8;
     const int total_blocks = layout_.blocks_per_row * layout_.blocks_per_col;
@@ -178,19 +167,10 @@ void VideoEncoder::embed_data_in_frame(const std::vector<std::byte> &data) {
     const auto *src = reinterpret_cast<const uint8_t *>(data.data());
     const int blocks_per_row = layout_.blocks_per_row;
 
-    uint8_t *dst_base;
-    int dst_stride;
-    if (sws_ctx) {
-        dst_base = gray_buffer.data();
-        dst_stride = FRAME_WIDTH;
-        std::memset(dst_base, 128, gray_buffer.size());
-    } else {
-        av_frame_make_writable(frame);
-        dst_base = frame->data[0];
-        dst_stride = frame->linesize[0];
-        for (int y = 0; y < FRAME_HEIGHT; ++y)
-            std::memset(dst_base + y * dst_stride, 128, FRAME_WIDTH);
-    }
+    uint8_t *dst_base = frame->data[0];
+    const int dst_stride = frame->linesize[0];
+    for (int y = 0; y < FRAME_HEIGHT; ++y)
+        std::memset(dst_base + y * dst_stride, 128, FRAME_WIDTH);
 
 #pragma omp parallel for schedule(static)
     for (int block_idx = 0; block_idx < active_blocks; ++block_idx) {
@@ -218,13 +198,6 @@ void VideoEncoder::embed_data_in_frame(const std::vector<std::byte> &data) {
             std::memcpy(dst_base + (base_y + y) * dst_stride + base_x,
                         block[y], 8);
         }
-    }
-
-    if (sws_ctx) {
-        const uint8_t *src_data[1] = {gray_buffer.data()};
-        constexpr int src_linesize[1] = {FRAME_WIDTH};
-        sws_scale(sws_ctx, src_data, src_linesize, 0, FRAME_HEIGHT,
-                  frame->data, frame->linesize);
     }
 }
 

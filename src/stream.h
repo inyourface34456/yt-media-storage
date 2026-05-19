@@ -25,9 +25,7 @@
 extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
-#include <libavutil/imgutils.h>
 #include <libavutil/opt.h>
-#include <libswscale/swscale.h>
 }
 
 #include "configuration.h"
@@ -35,8 +33,9 @@ extern "C" {
 
 class StreamEncoder {
 public:
-    explicit StreamEncoder(const std::string &rtmp_url, int bitrate_kbps = 35000,
-                           int width = FRAME_WIDTH, int height = FRAME_HEIGHT);
+    explicit StreamEncoder(const std::string &rtmp_url, int bitrate_kbps = FRAME_BITRATE,
+                           int width = FRAME_WIDTH_STREAM, int height = FRAME_HEIGHT_STREAM,
+                           int fps = FRAME_FPS);
 
     ~StreamEncoder();
 
@@ -64,7 +63,6 @@ private:
     AVCodecContext *video_codec_ctx_ = nullptr;
     AVStream *video_stream_ = nullptr;
     AVFrame *frame_ = nullptr;
-    SwsContext *sws_ctx_ = nullptr;
 
     AVCodecContext *audio_codec_ctx_ = nullptr;
     AVStream *audio_stream_ = nullptr;
@@ -75,8 +73,8 @@ private:
 
     int width_;
     int height_;
+    int fps_;
 
-    std::vector<uint8_t> gray_buffer_;
     std::vector<std::byte> frame_data_buffer_;
     FrameLayout layout_{};
     int64_t frame_index_ = 0;
@@ -88,7 +86,7 @@ private:
 
     void write_audio_up_to(int64_t video_pts);
 
-    void embed_data_in_frame(const std::vector<std::byte> &data);
+    void embed_data_in_frame(const std::vector<std::byte> &data) const;
 
     void encode_frame();
 

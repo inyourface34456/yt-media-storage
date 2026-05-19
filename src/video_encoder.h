@@ -25,14 +25,13 @@
 extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
-#include <libavutil/imgutils.h>
-#include <libswscale/swscale.h>
 }
 
 #include "configuration.h"
 #include "encoder.h"
 
 FrameLayout compute_frame_layout();
+
 FrameLayout compute_frame_layout(int width, int height);
 
 std::size_t max_packet_bytes_per_frame();
@@ -67,9 +66,7 @@ private:
     AVStream *stream = nullptr;
     AVFrame *frame = nullptr;
     AVPacket *av_packet = nullptr;
-    SwsContext *sws_ctx = nullptr;
 
-    std::vector<uint8_t> gray_buffer;
     std::vector<std::byte> frame_data_buffer;
     FrameLayout layout_{};
     int64_t frame_index = 0;
@@ -77,7 +74,7 @@ private:
 
     void init_encoder(const std::string &output_path);
 
-    void embed_data_in_frame(const std::vector<std::byte> &data);
+    void embed_data_in_frame(const std::vector<std::byte> &data) const;
 
     void encode_frame();
 
