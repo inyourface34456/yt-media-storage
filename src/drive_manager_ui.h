@@ -38,6 +38,8 @@
 
 #include <memory>
 
+#include "configuration.h"
+
 class WorkerThread : public QThread {
     Q_OBJECT
 
@@ -181,6 +183,7 @@ private:
     QLineEdit *streamUrlEdit;
     QLineEdit *streamKeyEdit;
     QSpinBox *bitrateSpinBox;
+    QSpinBox *fpsSpinBox;
     QComboBox *resolutionCombo;
     QPushButton *streamEncodeButton;
     QPushButton *streamDecodeButton;
